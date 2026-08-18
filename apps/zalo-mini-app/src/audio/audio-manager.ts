@@ -8,17 +8,14 @@ import type {
 /**
  * Application-level audio controller.
  *
- * There is exactly one of these. Every speaker button in the product goes
- * through it, which is what makes the "never two clips at once" rule
- * structural rather than a thing each screen has to remember: starting a new
- * clip stops whatever was playing, because there is only one playback slot.
+ * There is exactly one playback slot. Starting a new target-language clip
+ * stops anything already playing, so words, lesson prompts and dialogue never
+ * talk over one another.
  *
- * Recorded audio remains the preferred source. While authored seed content is
- * waiting for reviewed recordings, the controller can fall back to the host
- * device's speech-synthesis capability so speaker buttons stay functional in
- * development and internal testing. The content asset still remains marked
- * unavailable, so this fallback never disguises missing production audio from
- * validation/review workflows.
+ * Reviewed recordings are always preferred. Seed content that has not yet
+ * received reviewed recordings may use host-device speech synthesis as an
+ * explicit prototype fallback; `audio.available` remains false, so content QA
+ * still reports the missing production asset.
  */
 
 export type PlaybackState = "idle" | "loading" | "playing";
@@ -26,29 +23,23 @@ export type PlaybackState = "idle" | "loading" | "playing";
 export interface NowPlaying {
   ownerId: ContentId;
   speed: AudioSpeed;
-  /** Segment id when a single phrase of a longer clip is playing. */
   segmentId?: string;
 }
 
 export interface AudioManagerOptions {
-  /**
-   * Base URL for reviewed audio assets. Assets are served from object storage /
-   * CDN and are not bundled into the Mini App.
-   */
+  /** CDN/object-storage root, e.g. https://cdn.example.com/audio. */
   baseUrl: string;
+  /** Language-pack path beneath the root, e.g. zh-CN. */
+  basePath?: string;
 }
 
 export interface PlayOptions {
   ownerId: ContentId;
   asset?: AudioAsset;
   speed?: AudioSpeed;
-  /** Play only this segment of a recorded clip (shadowing build-up). */
   segmentId?: string;
-  /** Text used by the device-TTS fallback when no reviewed recording exists. */
   fallbackText?: string;
-  /** BCP-47 language tag used by device TTS, e.g. zh-CN. */
   lang?: string;
-  /** Called when playback finishes or is superseded. */
   onEnded?: () => void;
 }
 
@@ -79,9 +70,18 @@ export class AudioManager {
     for (const listener of this.listeners) listener(state, playing);
   }
 
-  /** Resolves a pack-relative `src` against the configured CDN base. */
-  resolve(track: AudioTrack, basePath: string): string {
-    return `${this.options.baseUrl.replace(/\/$/, "")}/${basePath}/${track.src}`;
+  private assetUrl(track: AudioTrack): string {
+    if (/^https?:\/\//i.test(track.src)) return track.src;
+
+    const root = this.options.baseUrl.replace(/\/$/, "");
+    const pack = (this.options.basePath ?? "").replace(/^\/+|\/+$/g, "");
+    const source = track.src.replace(/^\/+/, "");
+    return pack ? `${root}/${pack}/${source}` : `${root}/${source}`;
+  }
+
+  /** Public for diagnostics and tests; playback uses the same resolver. */
+  resolve(track: AudioTrack): string {
+    return this.assetUrl(track);
   }
 
   private trackFor(asset: AudioAsset, speed: AudioSpeed): AudioTrack | null {
@@ -129,13 +129,6 @@ export class AudioManager {
     return undefined;
   }
 
-  /**
-   * Whether a speaker can produce sound right now.
-   *
-   * Reviewed recordings win. If they are not available yet, target-language
-   * text can still be spoken through the device speech engine when the host
-   * WebView/browser exposes it.
-   */
   canPlay(asset: AudioAsset | undefined, fallbackText?: string): boolean {
     const hasRecordedAudio = Boolean(asset?.available && asset.normal?.src);
     return hasRecordedAudio || this.canSpeak(fallbackText);
@@ -210,8 +203,6 @@ export class AudioManager {
     this.utterance = utterance;
 
     try {
-      // The call is initiated from the learner's tap for manual playback. Some
-      // hosts also allow autoplay, but the learning flow never depends on it.
       synth.speak(utterance);
       if (token === this.currentToken) this.emit("playing", nowPlaying);
     } catch {
@@ -219,13 +210,6 @@ export class AudioManager {
     }
   }
 
-  /**
-   * Plays a clip, stopping anything already playing.
-   *
-   * Tapping the speaker that is currently playing stops it rather than
-   * restarting. If a reviewed recording is not available, device TTS is used
-   * as a temporary seed-content fallback when supported by the host.
-   */
   async play(options: PlayOptions): Promise<void> {
     const speed = options.speed ?? "normal";
 
@@ -267,9 +251,7 @@ export class AudioManager {
 
     const element = new Audio();
     element.preload = "auto";
-    element.src = track.src.startsWith("http")
-      ? track.src
-      : `${this.options.baseUrl.replace(/\/$/, "")}/${track.src}`;
+    element.src = this.assetUrl(track);
     this.element = element;
 
     const segment = options.segmentId
@@ -306,8 +288,6 @@ export class AudioManager {
     if (!track) return;
     const element = new Audio();
     element.preload = "auto";
-    element.src = track.src.startsWith("http")
-      ? track.src
-      : `${this.options.baseUrl.replace(/\/$/, "")}/${track.src}`;
+    element.src = this.assetUrl(track);
   }
 }
