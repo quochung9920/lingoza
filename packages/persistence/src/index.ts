@@ -3,14 +3,14 @@ import type { MasteryState } from "../../mastery-engine/src/index.js";
 import type { ReviewSchedule } from "../../srs-engine/src/index.js";
 
 /**
- * `@lingoza/persistence` -- repository interfaces and two prototype adapters.
+ * `@lingoza/persistence` -- repository interfaces and prototype adapters.
  *
- * The app talks to `LearnerRepository`, never to storage directly. That
- * indirection is the whole point: today the implementation is `localStorage`
- * behind a namespaced key, tomorrow it is an API client, and no screen or
- * engine changes. Treating `localStorage` as *the database* is what makes that
- * migration painful later, so it never gets to be one.
+ * The app talks to `LearnerRepository`, never storage directly. Today the web
+ * client uses a namespaced browser-storage adapter; a server-backed repository
+ * can replace it later without changing screens or learning engines.
  */
+
+export type LearningGoal = "conversation" | "travel" | "work" | "study" | "hsk";
 
 /** Learner-controlled display and playback preferences. */
 export interface LearnerPreferences {
@@ -25,13 +25,7 @@ export interface LearnerPreferences {
   dailyGoalMinutes: number;
 }
 
-/**
- * Microphone and recording consent.
- *
- * Consent is requested at the moment the learner starts a speaking activity,
- * never at app launch, and `keepRecordingsLocally: false` means an attempt is
- * discarded as soon as its metrics are computed.
- */
+/** Microphone and recording consent. */
 export interface PrivacySettings {
   microphoneConsentGrantedAt: string | null;
   keepRecordingsLocally: boolean;
@@ -55,6 +49,10 @@ export interface LearnerProfile {
   streak: StreakState;
   preferences: LearnerPreferences;
   privacy: PrivacySettings;
+  /** New learners see onboarding until this is true. */
+  onboardingCompleted: boolean;
+  /** Used to prioritise topic paths without changing the core curriculum. */
+  learningGoal: LearningGoal;
 }
 
 /** Everything the app persists about one learner. */
@@ -66,7 +64,7 @@ export interface LearnerSnapshot {
   schemaVersion: number;
 }
 
-export const LEARNER_SCHEMA_VERSION = 1;
+export const LEARNER_SCHEMA_VERSION = 2;
 
 export interface LearnerRepository {
   load(): Promise<LearnerSnapshot | null>;
@@ -101,7 +99,9 @@ export function createDefaultSnapshot(
         keepRecordingsLocally: false,
         recordingRetentionDays: 0,
         analyticsOptIn: false
-      }
+      },
+      onboardingCompleted: false,
+      learningGoal: "conversation"
     },
     mastery: {},
     reviews: {}
@@ -131,14 +131,70 @@ export interface KeyValueStore {
   removeItem(key: string): void;
 }
 
+interface LegacyLearnerProfileV1 {
+  learnerRef: string;
+  activeLanguage: string;
+  currentLevel: LingozaLevel;
+  completedLessonIds: ContentId[];
+  streak: StreakState;
+  preferences: LearnerPreferences;
+  privacy: PrivacySettings;
+}
+
+interface LegacyLearnerSnapshotV1 {
+  schemaVersion: 1;
+  profile: LegacyLearnerProfileV1;
+  mastery: MasteryState;
+  reviews: ReviewSchedule;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
 /**
- * Web-storage adapter for the prototype.
+ * Migrates the only previously shipped browser snapshot shape.
  *
- * Reads are defensive: corrupted JSON or a snapshot from a future schema
- * version resolves to `null` rather than throwing, so a bad write can never
- * lock a learner out of the app. A real migration path replaces the version
- * check when the shape next changes.
+ * Existing prototype users should not be forced through onboarding again or
+ * lose mastery just because profile metadata grew. New installs still start
+ * with onboarding incomplete via `createDefaultSnapshot`.
  */
+export function migrateLearnerSnapshot(value: unknown): LearnerSnapshot | null {
+  if (!isRecord(value) || typeof value.schemaVersion !== "number" || !isRecord(value.profile)) {
+    return null;
+  }
+
+  if (value.schemaVersion === LEARNER_SCHEMA_VERSION) {
+    return value as unknown as LearnerSnapshot;
+  }
+
+  if (value.schemaVersion !== 1) return null;
+
+  const legacy = value as unknown as LegacyLearnerSnapshotV1;
+  const defaults = createDefaultSnapshot(
+    legacy.profile.learnerRef || "local",
+    legacy.profile.activeLanguage || "zh-CN",
+    legacy.profile.preferences?.locale ?? "vi-VN"
+  );
+
+  return {
+    schemaVersion: LEARNER_SCHEMA_VERSION,
+    profile: {
+      ...defaults.profile,
+      ...legacy.profile,
+      preferences: { ...defaults.profile.preferences, ...legacy.profile.preferences },
+      privacy: { ...defaults.profile.privacy, ...legacy.profile.privacy },
+      // An existing learner already experienced the old app; do not interrupt
+      // them with first-run setup after upgrading storage.
+      onboardingCompleted: true,
+      learningGoal: "conversation"
+    },
+    mastery: legacy.mastery ?? {},
+    reviews: legacy.reviews ?? {}
+  };
+}
+
+/** Defensive browser-storage adapter with schema migration. */
 export function createWebStorageRepository(
   store: KeyValueStore,
   key = "lingoza.learner.v1"
@@ -148,9 +204,7 @@ export function createWebStorageRepository(
       const raw = store.getItem(key);
       if (!raw) return null;
       try {
-        const parsed = JSON.parse(raw) as LearnerSnapshot;
-        if (parsed.schemaVersion !== LEARNER_SCHEMA_VERSION) return null;
-        return parsed;
+        return migrateLearnerSnapshot(JSON.parse(raw) as unknown);
       } catch {
         return null;
       }
@@ -164,18 +218,12 @@ export function createWebStorageRepository(
   };
 }
 
-/** ISO date (YYYY-MM-DD) in the runtime's local timezone. */
+/** ISO date (YYYY-MM-DD) in UTC. */
 export function isoDate(at: string): string {
   return new Date(at).toISOString().slice(0, 10);
 }
 
-/**
- * Advances the streak for activity on `at`.
- *
- * Same-day activity is a no-op, consecutive days increment, and any longer gap
- * resets to 1 rather than 0 -- the learner did practise today, and showing them
- * a zero for it would be both wrong and discouraging.
- */
+/** Advances the practice streak for activity on `at`. */
 export function touchStreak(streak: StreakState, at: string): StreakState {
   const today = isoDate(at);
   if (streak.lastActiveDate === today) return streak;
