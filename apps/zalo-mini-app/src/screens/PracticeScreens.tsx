@@ -25,26 +25,15 @@ import { ct, t } from "../lib/i18n";
 import { ActivityView } from "./ActivityView";
 
 /**
- * The three non-lesson tabs: adaptive practice, conversation, and progress.
- *
- * None of them introduce new learning logic. Practice replays real lesson
- * activities chosen by the SRS engine, conversation reuses the same
- * `DialogueRunner` the lesson player uses, and progress is a read-only view
- * over the mastery engine. Duplicating any of that here is exactly how a
- * codebase ends up with two subtly different definitions of "mastered".
+ * Adaptive practice, conversation and progress screens. They reuse authored
+ * activities and deterministic engines instead of duplicating learning logic
+ * inside React.
  */
 
 /* ------------------------------------------------------------------ */
 /* Practice                                                            */
 /* ------------------------------------------------------------------ */
 
-/**
- * Finds a real activity that exercises `conceptId` through `kind`.
- *
- * Practice deliberately reuses authored activities rather than generating
- * synthetic drills: an authored activity has audio, hints and a can-do link,
- * and a generated one would have none of those.
- */
 function findActivity(
   activities: readonly Activity[],
   conceptId: ContentId,
@@ -53,9 +42,6 @@ function findActivity(
   const forConcept = activities.filter((activity) => activity.conceptIds.includes(conceptId));
   return (
     forConcept.find((activity) => activity.kind === kind) ??
-    // Fall back to any speaking/listening activity for the concept rather than
-    // dropping the slot: practising the right concept the wrong way beats not
-    // practising it at all.
     forConcept.find((activity) => activity.kind !== "UNIT_CHECKPOINT" && activity.kind !== "LEVEL_ASSESSMENT")
   );
 }
@@ -91,8 +77,8 @@ export function PracticeScreen({ onGoLearn }: { onGoLearn: () => void }) {
           conceptIds: [entry.slot.conceptId],
           kind: entry.activity.kind,
           score,
-          // Score only the skill the SRS engine actually scheduled, so a
-          // review of "speaking 咖啡" does not quietly credit listening too.
+          // Score only the skill the SRS engine scheduled, so a review of
+          // "speaking 咖啡" does not quietly credit listening too.
           skills: [entry.slot.skill],
           at: new Date().toISOString()
         });
@@ -142,10 +128,16 @@ export function PracticeScreen({ onGoLearn }: { onGoLearn: () => void }) {
 /* Conversation                                                        */
 /* ------------------------------------------------------------------ */
 
-export function ConversationScreen() {
+export function ConversationScreen({
+  initialScenarioId,
+  onExitScenario
+}: {
+  initialScenarioId?: ContentId;
+  onExitScenario?: () => void;
+} = {}) {
   const content = useContent();
   const { masteryLookup, recordOutcome } = useLearner();
-  const [activeId, setActiveId] = useState<ContentId | null>(null);
+  const [activeId, setActiveId] = useState<ContentId | null>(initialScenarioId ?? null);
 
   const unlockedConceptIds = useMemo(
     () => new Set(availableConcepts(content.bundle.concepts, masteryLookup).map((c) => c.id)),
@@ -155,9 +147,14 @@ export function ConversationScreen() {
   const active = activeId ? content.scenario(activeId) : null;
 
   if (active) {
+    const closeScenario = () => {
+      if (onExitScenario) onExitScenario();
+      else setActiveId(null);
+    };
+
     return (
       <div className="lz-stack">
-        <SecondaryButton onClick={() => setActiveId(null)}>‹ {ct("common.back")}</SecondaryButton>
+        <SecondaryButton onClick={closeScenario}>‹ {ct("common.back")}</SecondaryButton>
         <DialogueRunner
           key={active.id}
           scenario={active}
@@ -170,7 +167,7 @@ export function ConversationScreen() {
               skills: ACTIVITY_SKILL_MAP.ROLE_PLAY,
               at: new Date().toISOString()
             });
-            setActiveId(null);
+            closeScenario();
           }}
         />
       </div>
@@ -184,6 +181,11 @@ export function ConversationScreen() {
   return (
     <div className="lz-stack">
       <SectionHeading title={ct("nav.talk")} />
+      <Card variant="muted">
+        <p className="lz-muted" style={{ margin: 0 }}>
+          Hội thoại giúp chuyển từ “biết câu” sang phản xạ trong tình huống. Mỗi lượt đều dùng nội dung đã học trong curriculum.
+        </p>
+      </Card>
       {content.bundle.scenarios.map((scenario) => {
         const locked = !scenario.conceptIds.some((id) => unlockedConceptIds.has(id));
         return (
@@ -195,7 +197,7 @@ export function ConversationScreen() {
           >
             <div className="lz-row lz-row--between">
               <div>
-                <strong>{t(scenario.title)}</strong>
+                <strong>💬 {t(scenario.title)}</strong>
                 <p className="lz-muted">{t(scenario.setting)}</p>
               </div>
               <span className={locked ? "lz-pill lz-pill--locked" : "lz-pill"}>
@@ -215,7 +217,7 @@ export function ConversationScreen() {
 
 export function ProgressScreen({ onPractice }: { onPractice: () => void }) {
   const content = useContent();
-  const { masteryLookup, snapshot } = useLearner();
+  const { masteryLookup, masteryRecords, snapshot } = useLearner();
 
   const suggestion = useMemo(
     () => nextLesson(content.graph, masteryLookup),
@@ -239,6 +241,22 @@ export function ProgressScreen({ onPractice }: { onPractice: () => void }) {
     return values.length === 0 ? 0 : values.reduce((sum, value) => sum + value, 0) / values.length;
   }, [profile]);
 
+  const depthCounts = useMemo(() => {
+    let passive = 0;
+    let active = 0;
+    for (const record of masteryRecords) {
+      const listening = Math.max(record.skills.listeningRecognition ?? 0, record.skills.meaningRecognition ?? 0);
+      const production = Math.max(
+        record.skills.activeRecall ?? 0,
+        record.skills.speaking ?? 0,
+        record.skills.conversation ?? 0
+      );
+      if (listening >= 0.6) passive += 1;
+      if (production >= 0.7) active += 1;
+    }
+    return { passive, active };
+  }, [masteryRecords]);
+
   const hasData = masteryLookup.size > 0;
 
   return (
@@ -250,6 +268,21 @@ export function ProgressScreen({ onPractice }: { onPractice: () => void }) {
         </h2>
         <SkillProgress label="Tổng quan" value={overall} />
       </Card>
+
+      <div className="lz-mini-metric-grid">
+        <div className="lz-mini-metric">
+          <strong>{depthCounts.active}</strong>
+          <small>khái niệm dùng chủ động</small>
+        </div>
+        <div className="lz-mini-metric">
+          <strong>{depthCounts.passive}</strong>
+          <small>khái niệm nghe/hiểu</small>
+        </div>
+        <div className="lz-mini-metric">
+          <strong>{snapshot.profile.preferences.dailyGoalMinutes}</strong>
+          <small>phút mục tiêu / ngày</small>
+        </div>
+      </div>
 
       {hasData ? (
         <Card>
@@ -287,11 +320,10 @@ export function ProgressScreen({ onPractice }: { onPractice: () => void }) {
 
       <div className="lz-stack lz-stack--tight">
         <PrimaryButton onClick={onPractice}>{ct("progress.practice5")}</PrimaryButton>
-        {snapshot.profile.streak.longest > 0 ? (
-          <p className="lz-muted" style={{ textAlign: "center" }}>
-            🔥 Chuỗi dài nhất: {snapshot.profile.streak.longest} ngày
-          </p>
-        ) : null}
+        <p className="lz-muted" style={{ textAlign: "center" }}>
+          🔥 Chuỗi hiện tại: {snapshot.profile.streak.current} ngày
+          {snapshot.profile.streak.longest > 0 ? ` · dài nhất ${snapshot.profile.streak.longest} ngày` : ""}
+        </p>
       </div>
     </div>
   );
