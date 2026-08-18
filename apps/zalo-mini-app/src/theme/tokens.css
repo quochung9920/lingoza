@@ -1,0 +1,182 @@
+/**
+ * Lingoza Design System v2 -- tokens.
+ *
+ * Every value a screen is allowed to use lives here. Screens reference tokens,
+ * never raw hex or px, which is what keeps a purple accent change to one file
+ * and stops the UI drifting into six slightly different card shadows.
+ *
+ * Scale choices worth knowing:
+ * - Spacing is a 4px base. Anything not on the scale is a mistake, not a nudge.
+ * - Radii are assigned by hierarchy (control < card < sheet), not by taste.
+ * - Touch targets are floored at 44px even when the icon inside is 20px. The
+ *   speaker buttons are the single most-tapped control in the product and they
+ *   sit inline with text, so their hit area is padding, not glyph size.
+ */
+
+:root {
+  /* Brand ------------------------------------------------------------ */
+  --lz-violet-50: #f5f3ff;
+  --lz-violet-100: #ede9fe;
+  --lz-violet-200: #ddd6fe;
+  --lz-violet-300: #c4b5fd;
+  --lz-violet-400: #a78bfa;
+  --lz-violet-500: #8b5cf6;
+  --lz-violet-600: #7c3aed;
+  --lz-violet-700: #6d28d9;
+  --lz-violet-800: #5b21b6;
+  --lz-violet-900: #4c1d95;
+
+  /* Neutrals --------------------------------------------------------- */
+  --lz-ink-900: #171227;
+  --lz-ink-800: #2a2440;
+  --lz-ink-700: #443c60;
+  --lz-ink-500: #6b6485;
+  --lz-ink-400: #8b84a3;
+  --lz-ink-300: #b6b0c7;
+  --lz-ink-200: #ddd9e8;
+  --lz-ink-100: #eeebf5;
+  --lz-ink-50: #f7f5fc;
+  --lz-white: #ffffff;
+
+  /* Semantic --------------------------------------------------------- */
+  --lz-success-600: #0f9d6b;
+  --lz-success-100: #d6f5e8;
+  --lz-warning-600: #c2760b;
+  --lz-warning-100: #fdefd6;
+  --lz-danger-600: #d0384a;
+  --lz-danger-100: #fde3e6;
+  --lz-info-600: #2563eb;
+  --lz-info-100: #dde8ff;
+
+  /* Surfaces --------------------------------------------------------- */
+  --lz-bg: #fbfaff;
+  --lz-bg-raised: var(--lz-white);
+  --lz-bg-sunken: var(--lz-violet-50);
+  --lz-border: var(--lz-ink-200);
+  --lz-border-strong: var(--lz-ink-300);
+
+  --lz-text: var(--lz-ink-900);
+  --lz-text-muted: var(--lz-ink-500);
+  --lz-text-subtle: var(--lz-ink-400);
+  --lz-text-on-accent: var(--lz-white);
+
+  --lz-accent: var(--lz-violet-600);
+  --lz-accent-strong: var(--lz-violet-700);
+  --lz-accent-soft: var(--lz-violet-100);
+
+  /**
+   * Gradients are rationed. Exactly three surfaces are allowed to use one:
+   * the primary CTA, the home hero, and achievement moments. Anything else
+   * uses a flat token.
+   */
+  --lz-gradient-cta: linear-gradient(135deg, #7c3aed 0%, #6366f1 100%);
+  --lz-gradient-hero: linear-gradient(150deg, #6d28d9 0%, #7c3aed 45%, #8b5cf6 100%);
+  --lz-gradient-achievement: linear-gradient(135deg, #f59e0b 0%, #ec4899 100%);
+
+  /* Spacing (4px base) ----------------------------------------------- */
+  --lz-space-1: 4px;
+  --lz-space-2: 8px;
+  --lz-space-3: 12px;
+  --lz-space-4: 16px;
+  --lz-space-5: 20px;
+  --lz-space-6: 24px;
+  --lz-space-8: 32px;
+  --lz-space-10: 40px;
+  --lz-space-12: 48px;
+
+  /* Radius by hierarchy ---------------------------------------------- */
+  --lz-radius-sm: 10px;
+  --lz-radius-control: 12px;
+  --lz-radius-card: 16px;
+  --lz-radius-panel: 20px;
+  --lz-radius-sheet: 24px;
+  --lz-radius-pill: 999px;
+
+  /* Elevation -------------------------------------------------------- */
+  --lz-shadow-sm: 0 1px 2px rgba(23, 18, 39, 0.06);
+  --lz-shadow-card: 0 2px 10px rgba(23, 18, 39, 0.06);
+  --lz-shadow-raised: 0 8px 24px rgba(23, 18, 39, 0.1);
+  --lz-shadow-accent: 0 8px 20px rgba(109, 40, 217, 0.28);
+
+  /* Typography ------------------------------------------------------- */
+  --lz-font-ui: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  /* Target-language text gets its own stack so CJK glyphs pick a real face. */
+  --lz-font-target: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+    "Noto Sans SC", var(--lz-font-ui);
+
+  --lz-text-2xs: 11px;
+  --lz-text-xs: 12px;
+  --lz-text-sm: 14px;
+  --lz-text-base: 16px;
+  --lz-text-lg: 18px;
+  --lz-text-xl: 22px;
+  --lz-text-2xl: 28px;
+  --lz-text-3xl: 34px;
+  /* Target-language display sizes: learners need these large and unambiguous. */
+  --lz-target-md: 28px;
+  --lz-target-lg: 38px;
+
+  --lz-weight-regular: 400;
+  --lz-weight-medium: 500;
+  --lz-weight-semibold: 600;
+  --lz-weight-bold: 700;
+
+  --lz-leading-tight: 1.25;
+  --lz-leading-normal: 1.5;
+  --lz-leading-relaxed: 1.7;
+
+  /* Motion ----------------------------------------------------------- */
+  --lz-duration-fast: 120ms;
+  --lz-duration-base: 200ms;
+  --lz-duration-slow: 320ms;
+  --lz-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --lz-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Layers ----------------------------------------------------------- */
+  --lz-z-base: 0;
+  --lz-z-sticky: 10;
+  --lz-z-nav: 20;
+  --lz-z-sheet: 30;
+  --lz-z-toast: 40;
+
+  /* Touch & safe areas ------------------------------------------------ */
+  --lz-touch-min: 44px;
+  --lz-touch-comfortable: 56px;
+  --lz-safe-top: env(safe-area-inset-top, 0px);
+  --lz-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --lz-safe-left: env(safe-area-inset-left, 0px);
+  --lz-safe-right: env(safe-area-inset-right, 0px);
+
+  /**
+   * Zalo overlays its own menu capsule at the top-right of the webview.
+   * Nothing interactive may sit under it, so the header reserves this much
+   * inline space on the end side rather than hoping the capsule moves.
+   */
+  --lz-zalo-menu-inset: 108px;
+
+  --lz-nav-height: 62px;
+  --lz-header-height: 52px;
+}
+
+/**
+ * Motion is opt-out at the OS level. Transitions are cosmetic everywhere in
+ * Lingoza -- no state is communicated by animation alone -- so they can be
+ * removed wholesale without loss of meaning.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --lz-duration-fast: 0ms;
+    --lz-duration-base: 0ms;
+    --lz-duration-slow: 0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

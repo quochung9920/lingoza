@@ -1,51 +1,22 @@
-export type ProficiencyLevel = "pre-a1" | "a1" | "a2" | "b1" | "b2" | "c1" | "c2";
-export type Skill = "recognition" | "meaning" | "reading" | "listening" | "production" | "grammar" | "spelling" | "pronunciation" | "conversation";
-export interface Concept {
-    id: string;
-    title: string;
-    topic: string;
-    level: ProficiencyLevel;
-    prerequisites: string[];
-    skills: Skill[];
-}
-export interface VocabularyEntry {
-    id: string;
-    language: string;
-    surface: string;
-    reading?: string;
-    partOfSpeech: string;
-    meanings: string[];
-    topics: string[];
-    collocations?: string[];
-    metadata?: Record<string, unknown>;
-}
-export interface GrammarFrame {
-    id: string;
-    language: string;
-    intent: string;
-    patterns: string[];
-    slots: Record<string, string[]>;
-    feedback?: Record<string, string>;
-}
-export interface AnswerEvaluation {
-    score: number;
-    intentMatched: boolean;
-    patternMatched: boolean;
-    slotScore: number;
-    matchedPattern?: string;
-    missingSlots: string[];
-    feedback: string[];
-}
-export interface DialogueState {
-    id: string;
-    prompt: string;
-    acceptedIntents: string[];
-    transitions: Record<string, string>;
-    terminal?: boolean;
-}
-export interface DialogueScenario {
-    id: string;
-    topic: string;
-    initialState: string;
-    states: DialogueState[];
-}
+/**
+ * `@lingoza/content-schema` -- the single source of truth for every content
+ * shape in Lingoza.
+ *
+ * Two rules govern everything in here:
+ *
+ * 1. **Language-neutral core.** Nothing outside a `languageData` bag may be
+ *    specific to one language. Chinese ships `hanzi`/`pinyin`/`tones` inside
+ *    `languageData`; the framework never reads those keys.
+ * 2. **Audio is not optional.** Every content object a learner can *see* in
+ *    the target language carries an `AudioAsset`. The content validator
+ *    enforces this, so the Universal Audio Rule is a type-and-CI guarantee
+ *    rather than a UI convention.
+ */
+export * from "./common.js";
+export * from "./taxonomy.js";
+export * from "./lexicon.js";
+export * from "./curriculum.js";
+export * from "./dialogue.js";
+export * from "./assessment.js";
+export * from "./evaluation.js";
+export * from "./legacy.js";

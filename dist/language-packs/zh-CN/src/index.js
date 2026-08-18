@@ -1,91 +1,80 @@
-export const concepts = [
-    {
-        id: "greeting.basic",
-        title: "Basic greetings",
-        topic: "everyday.greetings",
-        level: "pre-a1",
-        prerequisites: [],
-        skills: ["recognition", "listening", "production", "conversation"]
-    },
-    {
-        id: "restaurant.order",
-        title: "Order food and drinks",
-        topic: "food.restaurant",
-        level: "a1",
-        prerequisites: ["greeting.basic"],
-        skills: ["meaning", "listening", "production", "grammar", "conversation"]
-    }
-];
-export const vocabulary = [
-    {
-        id: "zh.n.coffee",
-        language: "zh-CN",
-        surface: "咖啡",
-        reading: "kāfēi",
-        partOfSpeech: "noun",
-        meanings: ["coffee"],
-        topics: ["food.restaurant", "food.cafe"],
-        collocations: ["喝咖啡", "一杯咖啡"],
-        metadata: { simplified: "咖啡", traditional: "咖啡", classifier: "杯" }
-    },
-    {
-        id: "zh.n.tea",
-        language: "zh-CN",
-        surface: "茶",
-        reading: "chá",
-        partOfSpeech: "noun",
-        meanings: ["tea"],
-        topics: ["food.restaurant", "food.cafe"],
-        collocations: ["喝茶", "一杯茶"],
-        metadata: { simplified: "茶", traditional: "茶", classifier: "杯" }
-    }
-];
-export const orderDrinkFrame = {
-    id: "zh.restaurant.order.drink",
+import { compilePatternToFrame } from "../../../packages/evaluation-engine/src/index.js";
+import { toLegacyScenario } from "../../../packages/dialogue-engine/src/index.js";
+import { assessments } from "./assessments.js";
+import { concepts, courses, lessons, levels, units } from "./curriculum.js";
+import { scenarios } from "./dialogues.js";
+import { lexicalItems, sentences } from "./lexicon.js";
+import { patterns } from "./patterns.js";
+import { topics } from "./topics.js";
+/**
+ * `zh-CN` language pack.
+ *
+ * Everything Chinese-specific lives in this directory. The framework consumes
+ * `chineseBundle` through the `ContentBundle` interface and never imports this
+ * module by name, which is what a future `ja-JP` pack depends on.
+ */
+export const profile = {
     language: "zh-CN",
-    intent: "restaurant.order.drink",
-    patterns: [
-        "我要{quantity}{classifier}{item}",
-        "我想要{quantity}{classifier}{item}",
-        "我想喝{quantity}{classifier}{item}"
-    ],
-    slots: {
-        quantity: ["一"],
-        classifier: ["杯"],
-        item: ["咖啡", "茶"]
-    },
-    feedback: {
-        quantity: "Add a quantity such as 一 (one).",
-        classifier: "Use the drink classifier 杯 for a cup/glass.",
-        item: "Use an accepted drink from this lesson."
-    }
-};
-export const restaurantDialogue = {
-    id: "zh.restaurant.basic-order",
-    topic: "food.restaurant",
-    initialState: "greeting",
-    states: [
+    name: { "vi-VN": "Tiếng Trung", "en-US": "Chinese (Mandarin)" },
+    endonym: "中文",
+    flag: "🇨🇳",
+    /**
+     * Reading aids, declared as data. The UI renders a toggle per layer and
+     * looks the key up in each item's `languageData` -- it has no idea what
+     * "pinyin" means, which is exactly the point.
+     */
+    supportLayers: [
         {
-            id: "greeting",
-            prompt: "你好，欢迎光临。请问您要喝什么？",
-            acceptedIntents: ["restaurant.order.drink"],
-            transitions: { "restaurant.order.drink": "confirm" }
+            key: "pinyin",
+            label: { "vi-VN": "Phiên âm (pinyin)", "en-US": "Romanization (pinyin)" },
+            // Beginners need it constantly; by A2 leaning on it slows reading down.
+            defaultOnUpTo: "A2"
         },
         {
-            id: "confirm",
-            prompt: "好的。还需要别的吗？",
-            acceptedIntents: ["restaurant.finish", "restaurant.order.more"],
-            transitions: {
-                "restaurant.finish": "end",
-                "restaurant.order.more": "confirm"
-            }
-        },
-        {
-            id: "end",
-            prompt: "好的，谢谢！",
-            acceptedIntents: [],
-            transitions: {},
-            terminal: true
+            key: "traditional",
+            label: { "vi-VN": "Chữ phồn thể", "en-US": "Traditional characters" },
+            defaultOnUpTo: "A0"
         }
-    ]
+    ],
+    /** Resolved at runtime against the audio CDN base; no assets are bundled. */
+    audioBasePath: "zh-CN"
 };
+export const chineseBundle = {
+    profile,
+    levels,
+    topics,
+    concepts,
+    lexicalItems,
+    sentences,
+    patterns,
+    courses,
+    units,
+    lessons,
+    scenarios,
+    assessments
+};
+export { assessments, concepts, courses, lessons, levels, lexicalItems, patterns, scenarios, sentences, topics, units };
+/* ------------------------------------------------------------------ */
+/* Migration adapters                                                  */
+/* ------------------------------------------------------------------ */
+/**
+ * The v1 `orderDrinkFrame`, now *derived* from the v2 pattern rather than
+ * hand-maintained beside it.
+ *
+ * This is the migration made verifiable: the original evaluator tests still
+ * run, unchanged, against content that is now authored in the v2 schema. If
+ * the v2 pattern ever stopped accepting 我要一杯咖啡, those tests would fail.
+ */
+export const orderDrinkFrame = compilePatternToFrame(patterns.find((pattern) => pattern.id === "zh.p.order-drink"), lexicalItems, { locale: "vi-VN" });
+export const wantActionFrame = compilePatternToFrame(patterns.find((pattern) => pattern.id === "zh.p.want-action"), lexicalItems, { locale: "vi-VN" });
+export const nameIntroductionFrame = compilePatternToFrame(patterns.find((pattern) => pattern.id === "zh.p.name-introduction"), lexicalItems, { locale: "vi-VN" });
+/** Compiled frame for any pattern id in this pack. */
+export function frameFor(patternId) {
+    const pattern = patterns.find((candidate) => candidate.id === patternId);
+    if (!pattern)
+        throw new Error(`zh-CN pack has no pattern "${patternId}"`);
+    return compilePatternToFrame(pattern, lexicalItems, { locale: "vi-VN" });
+}
+const sentenceText = (id) => sentences.find((sentence) => sentence.id === id)?.text ?? "";
+/** @deprecated v1 projection of `zh.dialogue.cafe-order`. */
+export const restaurantDialogue = toLegacyScenario(scenarios.find((scenario) => scenario.id === "zh.dialogue.cafe-order"), sentenceText);

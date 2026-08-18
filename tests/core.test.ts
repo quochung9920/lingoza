@@ -5,6 +5,17 @@ import { advanceDialogue, startDialogue } from "../packages/dialogue-engine/src/
 import { scheduleReview } from "../packages/srs-engine/src/index.js";
 import { concepts, orderDrinkFrame, restaurantDialogue } from "../language-packs/zh-CN/src/index.js";
 
+/**
+ * The original v1 suite, carried forward.
+ *
+ * Two things changed and both are deliberate. `orderDrinkFrame` and
+ * `restaurantDialogue` are no longer hand-written constants -- they are now
+ * *derived* from v2 content by `compilePatternToFrame` and `toLegacyScenario`,
+ * so these assertions verify that the migration preserved behaviour rather
+ * than merely replacing it. And `availableConcepts` now reads the v2 `requires`
+ * graph, in which `restaurant.order` genuinely depends on four concepts rather
+ * than one, so the unlock test supplies all four.
+ */
 describe("model-free language engine", () => {
   it("accepts natural Chinese variants through grammar frames", () => {
     expect(evaluateAnswer("我要一杯咖啡。", orderDrinkFrame).score).toBe(1);
@@ -20,13 +31,22 @@ describe("model-free language engine", () => {
   });
 
   it("unlocks concepts only when prerequisites are mastered", () => {
-    const unlocked = availableConcepts(concepts, [
-      {
-        conceptId: "greeting.basic",
-        skills: { recognition: 0.9, listening: 0.8, production: 0.8 }
-      }
+    const mastered = (conceptId: string) => ({
+      conceptId,
+      skills: { listeningRecognition: 0.9, meaningRecognition: 0.8, speaking: 0.8 }
+    });
+
+    const partiallyReady = availableConcepts(concepts, [mastered("greeting.basic")]);
+    expect(partiallyReady.some((concept) => concept.id === "restaurant.order")).toBe(false);
+    expect(partiallyReady.some((concept) => concept.id === "intro.name")).toBe(true);
+
+    const fullyReady = availableConcepts(concepts, [
+      mastered("greeting.basic"),
+      mastered("want.basic"),
+      mastered("beverage.basic"),
+      mastered("classifier.cup")
     ]);
-    expect(unlocked.some((concept) => concept.id === "restaurant.order")).toBe(true);
+    expect(fullyReady.some((concept) => concept.id === "restaurant.order")).toBe(true);
   });
 
   it("moves through deterministic dialogue states", () => {

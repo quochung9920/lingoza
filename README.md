@@ -6,33 +6,53 @@ The core idea is to pre-build linguistic knowledge as validated, structured lang
 
 ## Principles
 
-- No LLM or generative model required at runtime.
-- Language knowledge is data, not hardcoded UI.
-- One universal curriculum/concept layer can support many languages.
-- Every language pack follows the same contracts while retaining language-specific rules.
-- Natural answer variants are represented through grammar frames, slots, synonyms, and language adapters.
-- Learner state tracks skill-level mastery instead of a single "lesson completed" flag.
+- No LLM, generative model, or cloud inference at runtime. Ever.
+- Audio-first and speaking-first: if a drill can be spoken, it is spoken. There are no writing exercises and no free-text inputs anywhere in the learner UI.
+- Language knowledge is data, not hardcoded UI. The core is language-neutral; anything Chinese-specific lives in a `languageData` bag the framework never reads.
+- Every visible target-language string carries playable audio metadata. The content validator enforces this in CI.
+- Mastery is a per-skill, decaying vector — never a `learned: true` flag.
+- Assessments measure transfer, not recall of a rehearsed string.
+- Nothing publishes without four human review sign-offs recorded in its provenance.
+
+### On speech feedback
+
+Lingoza ships no speech recognizer, so it never reports "pronunciation accuracy" or a phoneme score. `ModelFreeSpeechEvaluator` measures only what a waveform actually yields without a model — pitch contour, energy rhythm, pace and pause placement — and reports coarse measurements as qualitative bands rather than percentages. `SpeechEvaluationProvider` is the seam a real recognizer would slot into later; no learning code would change.
 
 ## Current structure
 
 ```text
 apps/
-  zalo-mini-app/         React + TypeScript learner client for Zalo Mini App
+  zalo-mini-app/          React + TypeScript learner client for Zalo Mini App
 
 packages/
-  content-schema/       Shared contracts for concepts, vocabulary, grammar and dialogue
-  evaluation-engine/    Deterministic answer matching and structured feedback
-  curriculum-engine/    Prerequisite graph and skill mastery
-  dialogue-engine/      Scenario/state-machine conversations
-  srs-engine/           Spaced repetition scheduling
+  content-schema/         Every content contract: levels, skills, topics, lexicon,
+                          patterns, curriculum, dialogue, assessment, provenance
+  curriculum-engine/      Concept graph: prerequisites, unlocking, next lesson,
+                          learning paths, course/unit progress
+  mastery-engine/         Per-skill mastery with forgetting curves and at-risk detection
+  evaluation-engine/      Deterministic pattern/slot matching and structured feedback
+  dialogue-engine/        Role-play state machine with hints and failure recovery
+  pronunciation-engine/   SpeechEvaluationProvider + ModelFreeSpeechEvaluator
+  assessment-engine/      Transfer-oriented item selection and per-skill scoring
+  srs-engine/             Multi-skill spaced repetition and daily session assembly
+  content-validator/      The CI gate that makes the content rules real
+  analytics/              Event contracts (no provider wired up, no voice data)
+  persistence/            Repository interfaces + memory/web-storage adapters
 
 language-packs/
-  zh-CN/                First reference language pack
+  zh-CN/                  Reference pack: A0/A1 seed curriculum
 
-tests/                  Behavioral tests for the learning core
+tools/
+  validate-content.ts     `npm run validate:content`
+
+tests/                    Behavioral tests for the learning core
 ```
 
-The first Zalo learner screen already consumes the shared `zh-CN` language pack and `evaluation-engine`. A learner can answer the restaurant exercise with natural variants such as:
+### Vertical slice
+
+The shipped A0/A1 Chinese seed runs the full loop end to end: home suggests the next lesson from the concept graph → unit screen shows can-do outcomes and lesson locks → the lesson player runs listening, shadowing, substitution, guided speaking, quick response and a cafe role-play → each activity feeds the mastery engine → the SRS engine assembles tomorrow's review → the progress screen reflects the change.
+
+Answer evaluation still accepts natural variants through pattern slots rather than one exact string:
 
 ```text
 我要一杯咖啡
@@ -40,7 +60,9 @@ The first Zalo learner screen already consumes the shared `zh-CN` language pack 
 我想喝一杯咖啡
 ```
 
-The app evaluates these through intent + grammar patterns + slots rather than an AI model or one exact expected string.
+### Audio status
+
+The pack ships authored audio *metadata* — paths, speeds, durations and phrase segments — but **no recordings exist yet**. The player degrades gracefully (speaker buttons render disabled and labelled rather than disappearing), and `npm run validate:content` reports every missing recording as a warning. Browser speech synthesis is deliberately not used as a stand-in. Audio is served from object storage/CDN via `VITE_LINGOZA_AUDIO_BASE`; none is bundled.
 
 ## Requirements
 

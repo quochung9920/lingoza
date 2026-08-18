@@ -1,6 +1,11 @@
-const defaultNormalizer = {
+/**
+ * Strips punctuation and whitespace and applies NFKC so that full-width and
+ * half-width forms compare equal. Deliberately does *not* lowercase: some
+ * writing systems carry meaning in case, and packs can supply their own.
+ */
+export const defaultNormalizer = {
     normalize(input) {
-        return input.normalize("NFKC").trim().replace(/[\s。！？,.!?]+/g, "");
+        return input.normalize("NFKC").trim().replace(/[\s。！？，、,.!?]+/g, "");
     }
 };
 function escapeRegex(value) {
@@ -24,6 +29,14 @@ function compilePattern(pattern, slots) {
     source += escapeRegex(pattern.slice(cursor));
     return new RegExp(`^${source}$`, "u");
 }
+/**
+ * Matches `rawAnswer` against every template in `frame`.
+ *
+ * Scoring is intentionally blunt: a full template match is 1, anything else is
+ * capped at 0.95 and scaled by how many slots were even present. That gap
+ * matters -- it stops a learner who produced all the right words in the wrong
+ * order from being told they were right.
+ */
 export function evaluateAnswer(rawAnswer, frame, normalizer = defaultNormalizer) {
     const answer = normalizer.normalize(rawAnswer);
     const normalizedPatterns = frame.patterns.map((pattern) => normalizer.normalize(pattern));
@@ -58,4 +71,73 @@ export function evaluateAnswer(rawAnswer, frame, normalizer = defaultNormalizer)
         missingSlots,
         feedback
     };
+}
+/**
+ * Resolves a normalised `SyntaxPattern` into a flat `GrammarFrame`.
+ *
+ * Slots are authored as lexical item ids so that a word's surface form lives
+ * in exactly one place; this walks those ids into concrete strings. Optional
+ * slots compile with an extra empty alternative so a template matches whether
+ * or not the learner supplied them.
+ */
+export function compilePatternToFrame(pattern, lexicalItems, options) {
+    const byId = new Map(lexicalItems.map((item) => [item.id, item]));
+    const slots = {};
+    const feedback = {};
+    for (const slot of pattern.slots) {
+        const surfaces = new Set(slot.acceptedSurfaces);
+        for (const itemId of slot.acceptedItemIds) {
+            const item = byId.get(itemId);
+            if (!item) {
+                throw new Error(`Pattern ${pattern.id} slot "${slot.name}" references unknown lexical item ${itemId}`);
+            }
+            surfaces.add(item.text);
+        }
+        if (slot.optional)
+            surfaces.add("");
+        if (surfaces.size === 0) {
+            throw new Error(`Pattern ${pattern.id} slot "${slot.name}" has no accepted fillers`);
+        }
+        // Longest first: otherwise a short filler can shadow a longer one that
+        // starts with the same characters when alternatives are tried in order.
+        slots[slot.name] = [...surfaces].sort((a, b) => b.length - a.length);
+        feedback[slot.name] = slot.hint[options.locale] ?? Object.values(slot.hint)[0] ?? slot.name;
+    }
+    return {
+        id: pattern.id,
+        language: pattern.language,
+        intent: pattern.intent,
+        patterns: pattern.templates,
+        slots,
+        feedback
+    };
+}
+/**
+ * Renders one concrete sentence from a pattern by filling each slot with the
+ * given surface forms. Used to generate substitution-drill rounds instead of
+ * hand-authoring every permutation.
+ */
+export function realizePattern(pattern, fillers, templateIndex = 0) {
+    const template = pattern.templates[templateIndex];
+    if (!template) {
+        throw new Error(`Pattern ${pattern.id} has no template at index ${templateIndex}`);
+    }
+    return template.replace(/\{([a-zA-Z0-9_-]+)\}/g, (_match, slotName) => {
+        const filler = fillers[slotName];
+        if (filler === undefined) {
+            const slot = pattern.slots.find((candidate) => candidate.name === slotName);
+            if (slot?.optional)
+                return "";
+            throw new Error(`No filler supplied for required slot "${slotName}" of ${pattern.id}`);
+        }
+        return filler;
+    });
+}
+/**
+ * Scores a multiple-choice response. Trivial, but it lives here so that every
+ * activity type produces a `0..1` score through the same module and the
+ * mastery engine has exactly one input contract.
+ */
+export function evaluateChoice(selectedIndex, correctIndex) {
+    return selectedIndex === correctIndex ? 1 : 0;
 }

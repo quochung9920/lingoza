@@ -1,16 +1,28 @@
 import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
-import zaloMiniApp from "zmp-vite-plugin";
 
 const repositoryRoot = fileURLToPath(new URL("../..", import.meta.url));
 
 export default defineConfig({
-  root: "./src",
-  base: "",
-  plugins: [zaloMiniApp(), react()],
+  root: ".",
+  base: "./",
+  plugins: [react()],
   build: {
-    assetsInlineLimit: 0
+    outDir: "dist",
+    emptyOutDir: true,
+    assetsInlineLimit: 0,
+    modulePreload: { polyfill: false },
+    rollupOptions: {
+      output: {
+        entryFileNames: "assets/app.module.js",
+        chunkFileNames: "assets/[name].[hash].module.js",
+        assetFileNames: (assetInfo) =>
+          assetInfo.name?.endsWith(".css")
+            ? "assets/app.css"
+            : "assets/[name].[hash][extname]"
+      }
+    }
   },
   server: {
     fs: {
