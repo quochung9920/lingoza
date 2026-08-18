@@ -12,6 +12,8 @@ export interface LanguageRegistryEntry {
   label: LocalizedText;
   endonym: string;
   flag: string;
+  /** Reading aids enabled after onboarding for a new learner. */
+  beginnerSupportLayers: readonly string[];
   load(): Promise<ContentBundle>;
 }
 
@@ -23,6 +25,7 @@ const entries: readonly LanguageRegistryEntry[] = [
     label: { "vi-VN": "Tiếng Trung", "en-US": "Chinese (Mandarin)" },
     endonym: "中文",
     flag: "🇨🇳",
+    beginnerSupportLayers: ["pinyin"],
     async load() {
       const pack = await import("../../../../language-packs/zh-CN/src/index");
       return pack.chineseBundle;
