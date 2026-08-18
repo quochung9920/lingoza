@@ -1,35 +1,18 @@
 import { clamp01 } from "../../content-schema/src/index.js";
 
 /**
- * `@lingoza/pronunciation-engine` -- honest, model-free speech feedback.
+ * `@lingoza/pronunciation-engine` -- speech feedback with explicit evidence levels.
  *
- * ## What this package will and will not claim
- *
- * Lingoza ships no speech recognizer and no acoustic model, so it cannot know
- * which phonemes a learner produced. It therefore never reports "pronunciation
- * accuracy". What it *can* measure from a waveform, without any model, is
- * prosody: how the pitch moved, how the energy was distributed in time, how
- * long the utterance took, and where the silences fell. Those are real signals,
- * they matter enormously for tonal languages, and they are all this package
- * reports.
- *
- * `SpeechEvaluationProvider` is the seam. `ModelFreeSpeechEvaluator` is the
- * default implementation; a future recognizer-backed provider can be dropped in
- * without the learning core changing, because activities depend on the
- * interface and on `SpeechMetric`, not on how a score was obtained.
+ * The engine keeps prosody scoring deterministic and can optionally combine it
+ * with transcript and phoneme evidence produced by a specialised speech
+ * provider. It never invents phoneme accuracy when that evidence is missing.
  */
 
 /* ------------------------------------------------------------------ */
 /* Feature input                                                       */
 /* ------------------------------------------------------------------ */
 
-/**
- * Frame-level acoustic features extracted from a recording.
- *
- * Extraction is the app's job (Web Audio autocorrelation for pitch, RMS for
- * energy); this package is pure maths over the resulting arrays so it stays
- * testable and platform-independent.
- */
+/** Frame-level acoustic features extracted from a recording. */
 export interface AudioFeatures {
   /** Fundamental frequency per frame in Hz. 0 marks an unvoiced/silent frame. */
   pitchHz: number[];
@@ -40,24 +23,53 @@ export interface AudioFeatures {
   durationMs: number;
 }
 
+/** Transcript evidence produced by a speech recognizer. */
+export interface SpeechRecognitionEvidence {
+  expectedText: string;
+  recognizedText: string;
+  /** 0..1 provider confidence when available. */
+  confidence?: number;
+  providerId: string;
+}
+
+/** Per-unit pronunciation evidence produced by an acoustic/forced-alignment provider. */
+export interface PhonemeUnitEvidence {
+  expected: string;
+  observed?: string;
+  /** Provider-normalized 0..1 score for this unit. */
+  score: number;
+  startMs?: number;
+  endMs?: number;
+}
+
+export interface PhonemeEvidence {
+  providerId: string;
+  units: PhonemeUnitEvidence[];
+}
+
 /** What the reference recording and the learner's attempt look like together. */
 export interface SpeechAttempt {
   reference: AudioFeatures;
   learner: AudioFeatures;
   /** Set by the language pack; gates whether tone is reported at all. */
   tonal: boolean;
+  /** Optional recognizer result used to verify the learner said the target content. */
+  recognition?: SpeechRecognitionEvidence;
+  /** Optional phoneme/syllable evidence from a specialised pronunciation scorer. */
+  phonemes?: PhonemeEvidence;
 }
 
 /* ------------------------------------------------------------------ */
 /* Metric output                                                       */
 /* ------------------------------------------------------------------ */
 
-/**
- * The measurable dimensions. Each maps to something a learner can act on --
- * "your pitch fell where it should have risen" is coachable in a way that a
- * single opaque percentage is not.
- */
-export type SpeechMetricId = "toneContour" | "rhythm" | "pace" | "pausing";
+export type SpeechMetricId =
+  | "contentMatch"
+  | "phonemeAccuracy"
+  | "toneContour"
+  | "rhythm"
+  | "pace"
+  | "pausing";
 
 /** Qualitative band. Preferred over raw numbers for anything imprecise. */
 export type MetricBand = "needs-work" | "fair" | "good" | "excellent";
@@ -67,36 +79,84 @@ export interface SpeechMetric {
   /** Normalized 0..1. */
   value: number;
   band: MetricBand;
-  /**
-   * Whether this metric should be shown as a percentage. False for metrics
-   * whose underlying measurement is too coarse to justify a number, which the
-   * UI renders as a band label instead.
-   */
+  /** Whether the metric may honestly be shown as a percentage. */
   precise: boolean;
-  /** Machine-readable coaching key; the UI owns the wording per locale. */
+  /** Machine-readable coaching key; the UI owns localized wording. */
   adviceKey: string;
 }
 
-export interface SpeechEvaluation {
-  metrics: SpeechMetric[];
-  /** Mean of available metrics. Used for mastery, never shown as "accuracy". */
-  overall: number;
-  /**
-   * Metrics that could not be computed, with a reason. Surfaced so the UI can
-   * say "we couldn't hear that clearly" rather than silently scoring zero.
-   */
-  unavailable: Array<{ id: SpeechMetricId; reason: "no-voiced-frames" | "too-short" | "not-applicable" }>;
+export type VerificationState = "unverified" | "matched" | "mismatch";
+export type PronunciationEvidenceLevel = "prosody-only" | "phoneme-verified";
+
+export interface SpeechVerification {
+  content: VerificationState;
+  pronunciation: PronunciationEvidenceLevel;
+  recognizedText?: string;
+  recognitionConfidence?: number;
+  recognitionProviderId?: string;
+  phonemeProviderId?: string;
 }
 
-/**
- * The extension seam. Any future provider -- an on-device recognizer, a server
- * scorer -- implements this and the learning core is unaffected.
- */
+export type UnavailableReason =
+  | "no-voiced-frames"
+  | "too-short"
+  | "not-applicable"
+  | "provider-unavailable";
+
+export interface SpeechEvaluation {
+  metrics: SpeechMetric[];
+  /** Weighted evidence score. The UI must not label this "pronunciation accuracy" unless phoneme evidence exists. */
+  overall: number;
+  unavailable: Array<{ id: SpeechMetricId; reason: UnavailableReason }>;
+  verification: SpeechVerification;
+  phonemeUnits?: PhonemeUnitEvidence[];
+}
+
+/** Extension seam for model-free, browser-assisted or recognizer-backed scoring. */
 export interface SpeechEvaluationProvider {
   readonly id: string;
-  /** False for `ModelFreeSpeechEvaluator`; gates any phoneme-level UI. */
+  readonly supportsContentScoring: boolean;
   readonly supportsPhonemeScoring: boolean;
   evaluate(attempt: SpeechAttempt): SpeechEvaluation;
+}
+
+/* ------------------------------------------------------------------ */
+/* Text verification                                                   */
+/* ------------------------------------------------------------------ */
+
+/** Removes punctuation/spacing while preserving letters, numbers and CJK text. */
+export function normalizeSpeechText(text: string): string {
+  return text
+    .normalize("NFKC")
+    .toLocaleLowerCase()
+    .replace(/[\p{P}\p{S}\s]+/gu, "")
+    .trim();
+}
+
+function levenshtein(a: readonly string[], b: readonly string[]): number {
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+
+  let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i += 1) {
+    const current = new Array<number>(b.length + 1);
+    current[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const substitution = previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1);
+      current[j] = Math.min(previous[j] + 1, current[j - 1] + 1, substitution);
+    }
+    previous = current;
+  }
+  return previous[b.length];
+}
+
+/** Character/grapheme similarity used only for content match, not phoneme accuracy. */
+export function speechTextSimilarity(expectedText: string, recognizedText: string): number {
+  const expected = Array.from(normalizeSpeechText(expectedText));
+  const recognized = Array.from(normalizeSpeechText(recognizedText));
+  if (expected.length === 0 && recognized.length === 0) return 1;
+  const denominator = Math.max(expected.length, recognized.length, 1);
+  return clamp01(1 - levenshtein(expected, recognized) / denominator);
 }
 
 /* ------------------------------------------------------------------ */
@@ -130,8 +190,6 @@ function toRelativeSemitones(pitchHz: readonly number[]): number[] {
   const voiced = pitchHz.filter((hz) => hz > 0);
   if (voiced.length === 0) return [];
   const mean = voiced.reduce((sum, hz) => sum + hz, 0) / voiced.length;
-  // Speaker-relative on purpose: a learner with a lower voice than the speaker
-  // is not mispronouncing anything, so absolute pitch must not be scored.
   return pitchHz.map((hz) => (hz > 0 ? 12 * Math.log2(hz / mean) : Number.NaN));
 }
 
@@ -167,13 +225,11 @@ function silenceMask(energy: readonly number[], relativeFloor = 0.15): boolean[]
 }
 
 /* ------------------------------------------------------------------ */
-/* The default provider                                                */
+/* Model-free prosody provider                                         */
 /* ------------------------------------------------------------------ */
 
 export interface ModelFreeOptions {
-  /** Utterances shorter than this are rejected as unmeasurable. */
   minDurationMs: number;
-  /** Duration ratio within which pace counts as on target. */
   paceTolerance: number;
 }
 
@@ -182,18 +238,9 @@ export const DEFAULT_MODEL_FREE_OPTIONS: ModelFreeOptions = {
   paceTolerance: 0.25
 };
 
-/**
- * Prosody-only evaluator.
- *
- * Both recordings are time-normalized to a common frame count before
- * comparison, so a learner speaking more slowly is judged on the *shape* of
- * their pitch and energy rather than penalised twice -- pace is scored
- * separately and explicitly.
- */
 export class ModelFreeSpeechEvaluator implements SpeechEvaluationProvider {
   readonly id = "model-free-prosody";
-
-  /** No acoustic model means no phoneme scoring. Stated, not implied. */
+  readonly supportsContentScoring = false;
   readonly supportsPhonemeScoring = false;
 
   constructor(private readonly options: ModelFreeOptions = DEFAULT_MODEL_FREE_OPTIONS) {}
@@ -202,6 +249,10 @@ export class ModelFreeSpeechEvaluator implements SpeechEvaluationProvider {
     const metrics: SpeechMetric[] = [];
     const unavailable: SpeechEvaluation["unavailable"] = [];
     const { reference, learner } = attempt;
+    const verification: SpeechVerification = {
+      content: "unverified",
+      pronunciation: "prosody-only"
+    };
 
     if (learner.durationMs < this.options.minDurationMs) {
       return {
@@ -209,7 +260,8 @@ export class ModelFreeSpeechEvaluator implements SpeechEvaluationProvider {
         overall: 0,
         unavailable: (["toneContour", "rhythm", "pace", "pausing"] as SpeechMetricId[]).map(
           (id) => ({ id, reason: "too-short" as const })
-        )
+        ),
+        verification
       };
     }
 
@@ -218,7 +270,6 @@ export class ModelFreeSpeechEvaluator implements SpeechEvaluationProvider {
       Math.min(200, Math.round(Math.max(reference.durationMs, learner.durationMs) / 20))
     );
 
-    /* Tone contour -------------------------------------------------- */
     if (!attempt.tonal) {
       unavailable.push({ id: "toneContour", reason: "not-applicable" });
     } else {
@@ -227,15 +278,10 @@ export class ModelFreeSpeechEvaluator implements SpeechEvaluationProvider {
       if (referenceTone.length === 0 || learnerTone.length === 0) {
         unavailable.push({ id: "toneContour", reason: "no-voiced-frames" });
       } else {
-        const correlation = pearson(
-          resample(referenceTone, frames),
-          resample(learnerTone, frames)
-        );
+        const correlation = pearson(resample(referenceTone, frames), resample(learnerTone, frames));
         if (correlation === null) {
           unavailable.push({ id: "toneContour", reason: "no-voiced-frames" });
         } else {
-          // Map [-1, 1] onto [0, 1]: an inverted contour (rising where the
-          // reference falls) is a real tone error and must not score as 0.5.
           const value = clamp01((correlation + 1) / 2);
           metrics.push({
             id: "toneContour",
@@ -248,11 +294,7 @@ export class ModelFreeSpeechEvaluator implements SpeechEvaluationProvider {
       }
     }
 
-    /* Rhythm -------------------------------------------------------- */
-    const rhythmCorrelation = pearson(
-      resample(reference.energy, frames),
-      resample(learner.energy, frames)
-    );
+    const rhythmCorrelation = pearson(resample(reference.energy, frames), resample(learner.energy, frames));
     if (rhythmCorrelation === null) {
       unavailable.push({ id: "rhythm", reason: "no-voiced-frames" });
     } else {
@@ -266,7 +308,6 @@ export class ModelFreeSpeechEvaluator implements SpeechEvaluationProvider {
       });
     }
 
-    /* Pace ---------------------------------------------------------- */
     const ratio = reference.durationMs > 0 ? learner.durationMs / reference.durationMs : 1;
     const deviation = Math.abs(Math.log(ratio || 1));
     const paceValue = clamp01(1 - deviation / (this.options.paceTolerance * 4));
@@ -274,16 +315,15 @@ export class ModelFreeSpeechEvaluator implements SpeechEvaluationProvider {
       id: "pace",
       value: paceValue,
       band: bandFor(paceValue),
-      // Duration ratio is a blunt instrument; a percentage would overstate it.
       precise: false,
-      adviceKey: ratio > 1 + this.options.paceTolerance
-        ? "pace.tooSlow"
-        : ratio < 1 - this.options.paceTolerance
-          ? "pace.tooFast"
-          : "pace.ok"
+      adviceKey:
+        ratio > 1 + this.options.paceTolerance
+          ? "pace.tooSlow"
+          : ratio < 1 - this.options.paceTolerance
+            ? "pace.tooFast"
+            : "pace.ok"
     });
 
-    /* Pausing ------------------------------------------------------- */
     const referencePauses = resample(
       silenceMask(reference.energy).map((silent) => (silent ? 1 : 0)),
       frames
@@ -306,13 +346,100 @@ export class ModelFreeSpeechEvaluator implements SpeechEvaluationProvider {
     });
 
     const overall =
-      metrics.length === 0
-        ? 0
-        : metrics.reduce((sum, metric) => sum + metric.value, 0) / metrics.length;
+      metrics.length === 0 ? 0 : metrics.reduce((sum, metric) => sum + metric.value, 0) / metrics.length;
 
-    return { metrics, overall, unavailable };
+    return { metrics, overall, unavailable, verification };
   }
 }
 
-/** Shared default instance; the evaluator is stateless. */
+/* ------------------------------------------------------------------ */
+/* Hybrid verifier                                                     */
+/* ------------------------------------------------------------------ */
+
+const HYBRID_WEIGHT: Readonly<Record<SpeechMetricId, number>> = {
+  contentMatch: 0.35,
+  phonemeAccuracy: 0.3,
+  toneContour: 0.15,
+  rhythm: 0.08,
+  pace: 0.06,
+  pausing: 0.06
+};
+
+/**
+ * Combines deterministic prosody with optional recognition/phoneme evidence.
+ * Missing providers simply remove those dimensions; they are never replaced
+ * with invented values.
+ */
+export class HybridSpeechEvaluator implements SpeechEvaluationProvider {
+  readonly id = "hybrid-speech-verification";
+  readonly supportsContentScoring = true;
+  readonly supportsPhonemeScoring = true;
+
+  constructor(private readonly prosody = new ModelFreeSpeechEvaluator()) {}
+
+  evaluate(attempt: SpeechAttempt): SpeechEvaluation {
+    const base = this.prosody.evaluate(attempt);
+    const metrics = [...base.metrics];
+    const unavailable = [...base.unavailable];
+    const verification: SpeechVerification = { ...base.verification };
+
+    if (attempt.recognition) {
+      const value = speechTextSimilarity(
+        attempt.recognition.expectedText,
+        attempt.recognition.recognizedText
+      );
+      metrics.unshift({
+        id: "contentMatch",
+        value,
+        band: bandFor(value),
+        precise: true,
+        adviceKey: value >= 0.9 ? "content.match" : "content.mismatch"
+      });
+      verification.content = value >= 0.9 ? "matched" : "mismatch";
+      verification.recognizedText = attempt.recognition.recognizedText;
+      verification.recognitionConfidence = attempt.recognition.confidence;
+      verification.recognitionProviderId = attempt.recognition.providerId;
+    } else {
+      unavailable.push({ id: "contentMatch", reason: "provider-unavailable" });
+    }
+
+    if (attempt.phonemes && attempt.phonemes.units.length > 0) {
+      const value = clamp01(
+        attempt.phonemes.units.reduce((sum, unit) => sum + clamp01(unit.score), 0) /
+          attempt.phonemes.units.length
+      );
+      metrics.splice(attempt.recognition ? 1 : 0, 0, {
+        id: "phonemeAccuracy",
+        value,
+        band: bandFor(value),
+        precise: true,
+        adviceKey: value >= 0.8 ? "phoneme.ok" : "phoneme.retry"
+      });
+      verification.pronunciation = "phoneme-verified";
+      verification.phonemeProviderId = attempt.phonemes.providerId;
+    } else {
+      unavailable.push({ id: "phonemeAccuracy", reason: "provider-unavailable" });
+    }
+
+    let weighted = 0;
+    let totalWeight = 0;
+    for (const metric of metrics) {
+      const weight = HYBRID_WEIGHT[metric.id];
+      weighted += metric.value * weight;
+      totalWeight += weight;
+    }
+    const overall = totalWeight > 0 ? clamp01(weighted / totalWeight) : 0;
+
+    return {
+      metrics,
+      overall,
+      unavailable,
+      verification,
+      phonemeUnits: attempt.phonemes?.units
+    };
+  }
+}
+
+/** Shared default instances; evaluators are stateless. */
 export const modelFreeSpeechEvaluator = new ModelFreeSpeechEvaluator();
+export const hybridSpeechEvaluator = new HybridSpeechEvaluator(modelFreeSpeechEvaluator);
