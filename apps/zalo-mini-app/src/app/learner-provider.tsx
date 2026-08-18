@@ -48,12 +48,7 @@ import {
 } from "../../../../packages/persistence/src/index";
 import { DEFAULT_LOCALE } from "../lib/i18n";
 
-/**
- * Learner state: mastery, review schedule, preferences, privacy, streak and
- * onboarding choices. Learning decisions remain in the engine packages; this
- * provider only coordinates state and persistence.
- */
-
+/** Learner state and persistence orchestration. */
 export interface OnboardingSelection {
   language: string;
   goal: LearningGoal;
@@ -63,13 +58,12 @@ export interface OnboardingSelection {
 
 export interface LearnerValue {
   snapshot: LearnerSnapshot;
-  /** Decayed mastery as of `now`, ready for the curriculum engine. */
+  /** False until the persisted snapshot has been read or ruled absent. */
+  hydrated: boolean;
   masteryLookup: MasteryLookup;
   masteryRecords: MasteryRecord[];
   masteryState: MasteryState;
-  /** Today's assembled review session. */
   reviewPlan: SessionPlan;
-  /** Records one activity result: mastery, SRS and streak all move together. */
   recordOutcome(outcome: ActivityOutcome): void;
   markLessonComplete(lessonId: ContentId): void;
   updatePreferences(patch: Partial<LearnerPreferences>): void;
@@ -83,8 +77,6 @@ export interface LearnerValue {
 const LearnerContext = createContext<LearnerValue | null>(null);
 
 function createRepository(): LearnerRepository {
-  // Private-mode webviews throw on `localStorage` access rather than returning
-  // null, so probe before committing to it and fall back to memory.
   try {
     if (typeof window !== "undefined" && window.localStorage) {
       const probe = "__lingoza_probe__";
@@ -105,8 +97,6 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
   );
   const [hydrated, setHydrated] = useState(false);
 
-  // A single timestamp per render pass keeps decay calculations consistent
-  // across every consumer within one frame.
   const nowRef = useRef(new Date().toISOString());
   nowRef.current = new Date().toISOString();
 
@@ -123,8 +113,6 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
   }, [repository]);
 
   useEffect(() => {
-    // Never write before the first read completes, or a fresh default snapshot
-    // would overwrite real progress on a slow load.
     if (hydrated) void repository.save(snapshot);
   }, [hydrated, repository, snapshot]);
 
@@ -156,11 +144,9 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
   const recordOutcome = useCallback((outcome: ActivityOutcome) => {
     setSnapshot((previous) => {
       const mastery = applyOutcome(previous.mastery, outcome);
-
-      // Every scored attempt also reschedules the (concept, skill) pairs it
-      // touched, so the review queue stays in step with mastery automatically.
       const skills = outcome.skills ?? [];
       let reviews: ReviewSchedule = previous.reviews;
+
       for (const conceptId of outcome.conceptIds) {
         for (const skill of skills.length > 0 ? skills : Object.keys(mastery[conceptId]?.skills ?? {})) {
           reviews = recordReview(
@@ -248,6 +234,7 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
   const value = useMemo<LearnerValue>(
     () => ({
       snapshot,
+      hydrated,
       masteryLookup,
       masteryRecords,
       masteryState: snapshot.mastery,
@@ -263,6 +250,7 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
     }),
     [
       snapshot,
+      hydrated,
       masteryLookup,
       masteryRecords,
       reviewPlan,
