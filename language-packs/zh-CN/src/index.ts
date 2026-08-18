@@ -7,18 +7,34 @@ import type {
 import { compilePatternToFrame } from "../../../packages/evaluation-engine/src/index.js";
 import { toLegacyScenario } from "../../../packages/dialogue-engine/src/index.js";
 import { assessments } from "./assessments.js";
-import { concepts, courses, lessons, levels, units } from "./curriculum.js";
+import {
+  concepts as coreConcepts,
+  courses as coreCourses,
+  lessons as coreLessons,
+  levels,
+  units as coreUnits
+} from "./curriculum.js";
 import { scenarios } from "./dialogues.js";
-import { lexicalItems, sentences } from "./lexicon.js";
+import {
+  coreCourseUnitExtensions,
+  expansionConcepts,
+  expansionCourses,
+  expansionLessons,
+  expansionLexicalItems,
+  expansionSentences,
+  expansionUnits
+} from "./expansion.js";
+import { lexicalItems as coreLexicalItems, sentences as coreSentences } from "./lexicon.js";
 import { patterns } from "./patterns.js";
 import { topics } from "./topics.js";
 
 /**
  * `zh-CN` language pack.
  *
- * Everything Chinese-specific lives in this directory. The framework consumes
- * `chineseBundle` through the `ContentBundle` interface and never imports this
- * module by name, which is what a future `ja-JP` pack depends on.
+ * The compact original vertical slice remains intact for migration tests while
+ * production-oriented expansion content is merged here. Existing concept ids
+ * are deliberately reused by specialist courses, so learning a word in the
+ * foundation path also counts when it appears in Travel/Pronunciation/etc.
  */
 
 export const profile: LanguageProfile = {
@@ -26,16 +42,10 @@ export const profile: LanguageProfile = {
   name: { "vi-VN": "Tiếng Trung", "en-US": "Chinese (Mandarin)" },
   endonym: "中文",
   flag: "🇨🇳",
-  /**
-   * Reading aids, declared as data. The UI renders a toggle per layer and
-   * looks the key up in each item's `languageData` -- it has no idea what
-   * "pinyin" means, which is exactly the point.
-   */
   supportLayers: [
     {
       key: "pinyin",
       label: { "vi-VN": "Phiên âm (pinyin)", "en-US": "Romanization (pinyin)" },
-      // Beginners need it constantly; by A2 leaning on it slows reading down.
       defaultOnUpTo: "A2"
     },
     {
@@ -44,9 +54,22 @@ export const profile: LanguageProfile = {
       defaultOnUpTo: "A0"
     }
   ],
-  /** Resolved at runtime against the audio CDN base; no assets are bundled. */
   audioBasePath: "zh-CN"
 };
+
+export const lexicalItems = [...coreLexicalItems, ...expansionLexicalItems];
+export const sentences = [...coreSentences, ...expansionSentences];
+export const concepts = [...coreConcepts, ...expansionConcepts];
+export const units = [...coreUnits, ...expansionUnits];
+export const lessons = [...coreLessons, ...expansionLessons];
+
+export const courses = [
+  ...coreCourses.map((course) => ({
+    ...course,
+    unitIds: [...course.unitIds, ...(coreCourseUnitExtensions[course.id] ?? [])]
+  })),
+  ...expansionCourses
+];
 
 export const chineseBundle: ContentBundle = {
   profile,
@@ -65,30 +88,16 @@ export const chineseBundle: ContentBundle = {
 
 export {
   assessments,
-  concepts,
-  courses,
-  lessons,
   levels,
-  lexicalItems,
   patterns,
   scenarios,
-  sentences,
-  topics,
-  units
+  topics
 };
 
 /* ------------------------------------------------------------------ */
 /* Migration adapters                                                  */
 /* ------------------------------------------------------------------ */
 
-/**
- * The v1 `orderDrinkFrame`, now *derived* from the v2 pattern rather than
- * hand-maintained beside it.
- *
- * This is the migration made verifiable: the original evaluator tests still
- * run, unchanged, against content that is now authored in the v2 schema. If
- * the v2 pattern ever stopped accepting 我要一杯咖啡, those tests would fail.
- */
 export const orderDrinkFrame: GrammarFrame = compilePatternToFrame(
   patterns.find((pattern) => pattern.id === "zh.p.order-drink")!,
   lexicalItems,
