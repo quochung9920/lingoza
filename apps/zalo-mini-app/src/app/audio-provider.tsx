@@ -26,15 +26,17 @@ const AUDIO_BASE_URL = (import.meta.env?.VITE_LINGOZA_AUDIO_BASE as string | und
 export function AudioProvider({ children }: { children: ReactNode }) {
   const content = useContent();
   const basePath = content.bundle.profile.audioBasePath;
+  const language = content.bundle.profile.language;
   const manager = useMemo(
     () =>
       new AudioManager({
         baseUrl: AUDIO_BASE_URL,
         basePath,
+        defaultLang: language,
         fallbackTextResolver: (ownerId) =>
           content.sentence(ownerId)?.text ?? content.item(ownerId)?.text
       }),
-    [basePath, content]
+    [basePath, language, content]
   );
   const [state, setState] = useState<PlaybackState>("idle");
   const [playing, setPlaying] = useState<NowPlaying | null>(null);
