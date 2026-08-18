@@ -20,7 +20,11 @@ describe("HSK 1-9 program roadmap", () => {
     expect(hskProgram.bands.slice(6, 9).every((band) => band.stage === "advanced")).toBe(true);
   });
 
-  it("does not claim unfinished bands are available", () => {
+  it("marks the curriculum structure of all nine bands as developed", () => {
+    expect(hskProgram.bands.every((band) => band.developmentStatus === "developed")).toBe(true);
+  });
+
+  it("keeps commercial release readiness separate from development completeness", () => {
     expect(hskProgram.bands[0]?.status).toBe("building");
     expect(hskProgram.bands.slice(1).every((band) => band.status === "planned")).toBe(true);
     expect(hskProgram.bands.some((band) => band.status === "available")).toBe(false);
@@ -45,7 +49,7 @@ describe("HSK 1-9 program roadmap", () => {
     expect(validateHskProductionPlan()).toEqual([]);
   });
 
-  it("keeps production-plan stage and status aligned with the learner roadmap", () => {
+  it("keeps production-plan stage and release status aligned with the learner roadmap", () => {
     for (const band of hskProgram.bands) {
       const productionPlan = productionPlanForBand(band.ordinal);
       expect(productionPlan, `missing production plan for HSK ${band.ordinal}`).toBeDefined();
