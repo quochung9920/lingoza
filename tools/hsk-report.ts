@@ -1,5 +1,6 @@
 import type { ContentId } from "../packages/content-schema/src/index.js";
 import { chineseBundle } from "../language-packs/zh-CN/src/index.js";
+import { hskReferenceCatalog } from "../language-packs/zh-CN/src/hsk-reference.js";
 
 const program = chineseBundle.programs?.find((candidate) => candidate.id === "zh.program.hsk");
 
@@ -42,6 +43,7 @@ const bands = program.bands.map((band) => {
   const publishedLexicalItems = lexicalItems.filter(
     (item) => item.provenance.publishStatus === "PUBLISHED"
   ).length;
+  const referenceEntries = hskReferenceCatalog.entries.filter((entry) => entry.band === band.ordinal);
 
   return {
     band: band.ordinal,
@@ -61,10 +63,11 @@ const bands = program.bands.map((band) => {
       publishedLexicalItems
     },
     referenceCoverage: {
-      mode: "pending-official-reference-catalog",
+      catalogStatus: hskReferenceCatalog.status,
+      referenceEntries: referenceEntries.length,
       percent: null,
       note:
-        "No HSK percentage is claimed until the official per-band reference catalog is imported and cross-checked."
+        "No HSK percentage is claimed until the official per-band reference catalog is complete and cross-checked."
     }
   };
 });
@@ -79,6 +82,7 @@ console.log(
     {
       program: program.title["vi-VN"] ?? program.title["en-US"],
       alignmentReference: program.alignmentReference.reference,
+      referenceCatalogStatus: hskReferenceCatalog.status,
       nineBandStructureValid: hasNineOrderedBands,
       policy: {
         certificationClaim: false,
