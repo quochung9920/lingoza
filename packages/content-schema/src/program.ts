@@ -4,11 +4,17 @@ import type { ContentId, LanguageTag, LocalizedText, SourceReference } from "./c
 export type ProgramStage = "elementary" | "intermediate" | "advanced";
 
 /**
- * Authoring status of a program band.
+ * Commercial release readiness of a program band.
  *
- * `building` means real learner content exists but coverage is incomplete;
- * `available` is reserved for a band whose required reference catalog and
- * production quality gates have been satisfied.
+ * This is deliberately NOT the same thing as "has a curriculum blueprint".
+ * A band may already have its full structure, themes, targets and learner
+ * outcomes designed while still being `planned` or `building` for commercial
+ * release because authored lessons, reviewed audio, reference coverage or
+ * human sign-off are incomplete.
+ *
+ * `planned`  = blueprint exists, learner-production work is not yet complete.
+ * `building` = real learner content exists, but one or more release gates remain.
+ * `available` = required reference coverage and production quality gates pass.
  */
 export type ProgramBandStatus = "available" | "building" | "planned";
 
@@ -18,9 +24,10 @@ export interface ProgramBand {
   ordinal: number;
   label: LocalizedText;
   stage: ProgramStage;
+  /** Release readiness, not curriculum-design completeness. */
   status: ProgramBandStatus;
   description: LocalizedText;
-  /** Existing Lingoza courses currently contributing to this band. */
+  /** Existing Lingoza courses currently contributing learner content to this band. */
   courseIds: ContentId[];
   /** Learner-facing outcomes, not claims of official certification. */
   canDoObjectives: LocalizedText[];
