@@ -47,6 +47,7 @@ import {
   type PrivacySettings
 } from "../../../../packages/persistence/src/index";
 import { DEFAULT_LOCALE } from "../lib/i18n";
+import { languageEntry } from "./language-registry";
 
 /** Learner state and persistence orchestration. */
 export interface OnboardingSelection {
@@ -203,6 +204,9 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
   }, [updatePrivacy]);
 
   const completeOnboarding = useCallback((selection: OnboardingSelection) => {
+    const beginnerLayers = languageEntry(selection.language)?.beginnerSupportLayers ?? [];
+    const useBeginnerLayers = selection.level === "A0" || selection.level === "A1";
+
     setSnapshot((previous) => ({
       ...previous,
       profile: {
@@ -213,7 +217,8 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
         onboardingCompleted: true,
         preferences: {
           ...previous.profile.preferences,
-          dailyGoalMinutes: selection.dailyGoalMinutes
+          dailyGoalMinutes: selection.dailyGoalMinutes,
+          visibleSupportLayers: useBeginnerLayers ? [...beginnerLayers] : []
         }
       }
     }));
