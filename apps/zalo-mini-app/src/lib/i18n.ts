@@ -61,7 +61,7 @@ const ui = {
     "speak.you": "Bạn",
     "speak.permissionTitle": "Cần quyền micro",
     "speak.permissionBody":
-      "Lingoza cần micro để bạn luyện nói. Bản ghi chỉ nằm trên máy bạn và bị xoá ngay sau khi chấm.",
+      "Lingoza cần micro để bạn luyện nói. Phân tích prosody cơ bản được xử lý cục bộ và bản ghi mặc định bị xoá sau lượt luyện. Nếu bạn bật kiểm tra đúng câu trong Cài đặt, trình duyệt/WebView có thể xử lý phần nhận dạng ngoài thiết bị.",
     "speak.permissionDenied":
       "Chưa có quyền micro. Bạn có thể bật lại trong cài đặt trình duyệt rồi thử lại.",
     "speak.unsupported": "Thiết bị này chưa hỗ trợ ghi âm. Bạn vẫn có thể nghe và nhắc lại.",
