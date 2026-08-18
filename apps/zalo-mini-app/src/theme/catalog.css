@@ -1,0 +1,40 @@
+/* Multi-course learning catalog ------------------------------------ */
+
+.lz-course-catalog__hero {
+  margin-bottom: var(--lz-space-2);
+}
+
+.lz-course-catalog__course {
+  display: grid;
+  gap: var(--lz-space-4);
+  overflow: hidden;
+}
+
+.lz-course-catalog__units {
+  display: grid;
+  gap: var(--lz-space-2);
+  padding-top: var(--lz-space-2);
+  border-top: 1px solid var(--lz-border);
+}
+
+.lz-course-catalog__unit {
+  box-shadow: none;
+  background: var(--lz-bg-raised);
+}
+
+.lz-course-catalog__unit-icon {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  background: var(--lz-accent-soft);
+  font-size: 21px;
+}
+
+@media (min-width: 720px) {
+  .lz-course-catalog__units {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
