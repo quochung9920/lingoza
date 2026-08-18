@@ -33,8 +33,212 @@
   font-size: 21px;
 }
 
+/* HSK 1-9 program roadmap ------------------------------------------ */
+
+.lz-hsk-roadmap {
+  display: grid;
+  gap: var(--lz-space-5);
+  padding: var(--lz-space-5);
+  border: 1px solid var(--lz-border);
+  border-radius: var(--lz-radius-xl);
+  background: var(--lz-bg-raised);
+  box-shadow: var(--lz-shadow-sm);
+}
+
+.lz-hsk-roadmap__head {
+  display: grid;
+  gap: var(--lz-space-3);
+}
+
+.lz-hsk-roadmap__head h2 {
+  margin: 4px 0 8px;
+  font-size: var(--lz-text-xl);
+  letter-spacing: -0.02em;
+}
+
+.lz-hsk-roadmap__head p {
+  margin: 0;
+  color: var(--lz-text-secondary);
+  line-height: 1.6;
+}
+
+.lz-hsk-roadmap__standard {
+  display: inline-grid;
+  gap: 2px;
+  width: fit-content;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--lz-accent-soft);
+  color: var(--lz-accent-strong);
+}
+
+.lz-hsk-roadmap__standard strong {
+  font-size: var(--lz-text-sm);
+}
+
+.lz-hsk-roadmap__standard span {
+  font-size: var(--lz-text-xs);
+  opacity: 0.76;
+}
+
+.lz-hsk-roadmap__notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--lz-space-3);
+  padding: var(--lz-space-3);
+  border-radius: 16px;
+  background: var(--lz-bg-muted);
+  color: var(--lz-text-secondary);
+}
+
+.lz-hsk-roadmap__notice p {
+  margin: 0;
+  font-size: var(--lz-text-sm);
+  line-height: 1.55;
+}
+
+.lz-hsk-stage {
+  display: grid;
+  gap: var(--lz-space-3);
+}
+
+.lz-hsk-stage__label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lz-space-3);
+}
+
+.lz-hsk-stage__label span {
+  font-size: var(--lz-text-xs);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--lz-accent-strong);
+}
+
+.lz-hsk-stage__label small {
+  color: var(--lz-text-tertiary);
+}
+
+.lz-hsk-stage__grid {
+  display: grid;
+  gap: var(--lz-space-3);
+}
+
+.lz-hsk-band {
+  position: relative;
+  display: grid;
+  gap: var(--lz-space-3);
+  min-width: 0;
+  padding: var(--lz-space-4);
+  border: 1px solid var(--lz-border);
+  border-radius: 18px;
+  background: var(--lz-bg-raised);
+}
+
+.lz-hsk-band[data-status="building"] {
+  border-color: color-mix(in srgb, var(--lz-accent) 34%, var(--lz-border));
+  background: linear-gradient(145deg, var(--lz-bg-raised), var(--lz-accent-soft));
+}
+
+.lz-hsk-band[data-status="planned"] {
+  background: var(--lz-bg-muted);
+}
+
+.lz-hsk-band__top {
+  display: flex;
+  align-items: center;
+  gap: var(--lz-space-3);
+}
+
+.lz-hsk-band__number {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: var(--lz-accent);
+  color: white;
+  font-size: var(--lz-text-lg);
+  font-weight: 900;
+  box-shadow: var(--lz-shadow-xs);
+}
+
+.lz-hsk-band[data-status="planned"] .lz-hsk-band__number {
+  background: var(--lz-text-tertiary);
+}
+
+.lz-hsk-band__heading {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.lz-hsk-band__heading strong {
+  font-size: var(--lz-text-md);
+}
+
+.lz-hsk-band__status {
+  width: fit-content;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.lz-hsk-band__status--available {
+  background: var(--lz-success-soft);
+  color: var(--lz-success-strong);
+}
+
+.lz-hsk-band__status--building {
+  background: var(--lz-accent-soft);
+  color: var(--lz-accent-strong);
+}
+
+.lz-hsk-band__status--planned {
+  background: var(--lz-bg-raised);
+  color: var(--lz-text-tertiary);
+}
+
+.lz-hsk-band > p {
+  margin: 0;
+  color: var(--lz-text-secondary);
+  font-size: var(--lz-text-sm);
+  line-height: 1.55;
+}
+
+.lz-hsk-band__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.lz-hsk-band__meta span,
+.lz-hsk-band__planned {
+  padding: 5px 8px;
+  border-radius: 10px;
+  background: var(--lz-bg-muted);
+  color: var(--lz-text-tertiary);
+  font-size: var(--lz-text-xs);
+}
+
+.lz-hsk-band__planned {
+  line-height: 1.45;
+}
+
 @media (min-width: 720px) {
   .lz-course-catalog__units {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .lz-hsk-roadmap__head {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+  }
+
+  .lz-hsk-stage__grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
