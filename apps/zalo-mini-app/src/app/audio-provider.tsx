@@ -21,19 +21,20 @@ interface AudioValue {
 
 const AudioContext = createContext<AudioValue | null>(null);
 
-/**
- * Reviewed recordings are served outside the Mini App bundle. The language
- * pack contributes its own `audioBasePath`, so the same player can resolve
- * zh-CN/items/... today and ja-JP/items/... later.
- */
 const AUDIO_BASE_URL = (import.meta.env?.VITE_LINGOZA_AUDIO_BASE as string | undefined) ?? "./audio";
 
 export function AudioProvider({ children }: { children: ReactNode }) {
-  const { bundle } = useContent();
-  const basePath = bundle.profile.audioBasePath;
+  const content = useContent();
+  const basePath = content.bundle.profile.audioBasePath;
   const manager = useMemo(
-    () => new AudioManager({ baseUrl: AUDIO_BASE_URL, basePath }),
-    [basePath]
+    () =>
+      new AudioManager({
+        baseUrl: AUDIO_BASE_URL,
+        basePath,
+        fallbackTextResolver: (ownerId) =>
+          content.sentence(ownerId)?.text ?? content.item(ownerId)?.text
+      }),
+    [basePath, content]
   );
   const [state, setState] = useState<PlaybackState>("idle");
   const [playing, setPlaying] = useState<NowPlaying | null>(null);
