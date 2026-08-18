@@ -34,21 +34,35 @@ import { ActivityView } from "./ActivityView";
 /* Practice                                                            */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Select an authored drill deterministically, rotating with practice attempts.
+ *
+ * Exact skill-kind matches win, but when content has multiple valid variants
+ * the learner does not see the same first item forever. This is deliberately a
+ * content-bank selector, not a sentence generator: every returned activity has
+ * authored audio, hints and curriculum links.
+ */
 function findActivity(
   activities: readonly Activity[],
   conceptId: ContentId,
-  kind: ActivityKind
+  kind: ActivityKind,
+  rotation: number
 ): Activity | undefined {
-  const forConcept = activities.filter((activity) => activity.conceptIds.includes(conceptId));
-  return (
-    forConcept.find((activity) => activity.kind === kind) ??
-    forConcept.find((activity) => activity.kind !== "UNIT_CHECKPOINT" && activity.kind !== "LEVEL_ASSESSMENT")
+  const forConcept = activities.filter(
+    (activity) =>
+      activity.conceptIds.includes(conceptId) &&
+      activity.kind !== "UNIT_CHECKPOINT" &&
+      activity.kind !== "LEVEL_ASSESSMENT"
   );
+  const exact = forConcept.filter((activity) => activity.kind === kind);
+  const pool = exact.length > 0 ? exact : forConcept;
+  if (pool.length === 0) return undefined;
+  return pool[Math.abs(rotation) % pool.length];
 }
 
 export function PracticeScreen({ onGoLearn }: { onGoLearn: () => void }) {
   const content = useContent();
-  const { reviewPlan, recordOutcome } = useLearner();
+  const { reviewPlan, recordOutcome, masteryState } = useLearner();
 
   const allActivities = useMemo(
     () => content.bundle.lessons.flatMap((lesson) => lesson.activities),
@@ -58,12 +72,18 @@ export function PracticeScreen({ onGoLearn }: { onGoLearn: () => void }) {
   const queue = useMemo(
     () =>
       reviewPlan.slots
-        .map((slot) => ({ slot, activity: findActivity(allActivities, slot.conceptId, slot.kind) }))
+        .map((slot) => {
+          const attempts = masteryState[slot.conceptId]?.skills[slot.skill]?.attempts ?? 0;
+          return {
+            slot,
+            activity: findActivity(allActivities, slot.conceptId, slot.kind, attempts)
+          };
+        })
         .filter(
           (entry): entry is { slot: (typeof reviewPlan.slots)[number]; activity: Activity } =>
             Boolean(entry.activity)
         ),
-    [reviewPlan.slots, allActivities]
+    [reviewPlan.slots, allActivities, masteryState]
   );
 
   const [index, setIndex] = useState(0);
@@ -77,8 +97,8 @@ export function PracticeScreen({ onGoLearn }: { onGoLearn: () => void }) {
           conceptIds: [entry.slot.conceptId],
           kind: entry.activity.kind,
           score,
-          // Score only the skill the SRS engine scheduled, so a review of
-          // "speaking 咖啡" does not quietly credit listening too.
+          // Score only the skill the SRS engine actually scheduled, so a
+          // review of "speaking 咖啡" does not quietly credit listening too.
           skills: [entry.slot.skill],
           at: new Date().toISOString()
         });
@@ -116,7 +136,7 @@ export function PracticeScreen({ onGoLearn }: { onGoLearn: () => void }) {
         {t(entry.activity.instruction)}
       </p>
       <ActivityView
-        key={`${entry.slot.conceptId}:${entry.slot.skill}:${index}`}
+        key={`${entry.slot.conceptId}:${entry.slot.skill}:${entry.activity.id}:${index}`}
         activity={entry.activity}
         onComplete={handleComplete}
       />
