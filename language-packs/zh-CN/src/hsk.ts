@@ -22,6 +22,7 @@ function band(
     ordinal,
     label: text(`HSK ${ordinal}`, `HSK ${ordinal}`),
     stage,
+    developmentStatus: "developed",
     status,
     description: text(viDescription, enDescription),
     courseIds,
@@ -30,21 +31,21 @@ function band(
 }
 
 /**
- * Lingoza's product roadmap for the GF0025-2021 three-stage, nine-band model.
+ * Lingoza's HSK 1-9 curriculum program aligned by reference to GF0025-2021.
  *
- * Only HSK 1 is marked `building`: the current foundation content contributes
- * to it, but coverage is deliberately not called complete until the official
- * reference catalog, native review and production audio gates are satisfied.
- * Higher bands are visible to learners as the long-term path without pretending
- * that placeholder courses already exist.
+ * All nine bands have a completed curriculum/production blueprint, so their
+ * `developmentStatus` is `developed`. The separate `status` field tracks
+ * commercial-release readiness only: HSK 1 already has learner content and is
+ * `building`; higher bands remain `planned` until authored lessons, production
+ * audio, reference coverage and human review gates are complete.
  */
 export const hskProgram: LearningProgram = {
   id: "zh.program.hsk",
   language: "zh-CN",
   title: text("Lộ trình HSK 1–9", "HSK 1–9 Path"),
   description: text(
-    "Một lộ trình tiếng Trung dài hạn từ sơ cấp đến cao cấp, lấy GF0025-2021 làm chuẩn tham chiếu và giữ nghe–nói–hội thoại là trung tâm của Lingoza.",
-    "A long-term Chinese path from elementary to advanced, aligned by reference to GF0025-2021 while keeping listening, speaking and conversation at the center of Lingoza."
+    "Chương trình HSK 1–9 đã được thiết kế đầy đủ từ sơ cấp đến cao cấp theo production blueprint của Lingoza, lấy GF0025-2021 làm chuẩn tham chiếu và giữ nghe–nói–hội thoại là trung tâm. Trạng thái phát hành thương mại được theo dõi riêng theo content, audio, review và coverage gate.",
+    "The complete HSK 1–9 curriculum has been designed from elementary to advanced using Lingoza's production blueprint, aligned by reference to GF0025-2021 while keeping listening, speaking and conversation at the center. Commercial release readiness is tracked separately through content, audio, review and coverage gates."
   ),
   alignmentReference: GF0025_REFERENCE,
   bands: [
