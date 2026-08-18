@@ -11,6 +11,8 @@
 interface ImportMetaEnv {
   /** Base URL for audio assets (object storage / CDN). */
   readonly VITE_LINGOZA_AUDIO_BASE?: string;
+  /** Public URL of Lingoza's authenticated server-side pronunciation gateway. */
+  readonly VITE_LINGOZA_SPEECH_ASSESSMENT_URL?: string;
 }
 
 interface ImportMeta {
