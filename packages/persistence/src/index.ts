@@ -25,13 +25,19 @@ export interface LearnerPreferences {
   dailyGoalMinutes: number;
 }
 
-/** Microphone and recording consent. */
+/** Microphone, recording and optional speech-verification consent. */
 export interface PrivacySettings {
   microphoneConsentGrantedAt: string | null;
   keepRecordingsLocally: boolean;
   /** Days a locally kept recording survives. 0 = discard after the attempt. */
   recordingRetentionDays: number;
   analyticsOptIn: boolean;
+  /**
+   * Allows the host browser/WebView speech recognizer to verify what sentence
+   * was spoken. False by default because a host implementation may process
+   * speech off-device.
+   */
+  speechRecognitionOptIn: boolean;
 }
 
 export interface StreakState {
@@ -64,7 +70,7 @@ export interface LearnerSnapshot {
   schemaVersion: number;
 }
 
-export const LEARNER_SCHEMA_VERSION = 2;
+export const LEARNER_SCHEMA_VERSION = 3;
 
 export interface LearnerRepository {
   load(): Promise<LearnerSnapshot | null>;
@@ -98,7 +104,8 @@ export function createDefaultSnapshot(
         microphoneConsentGrantedAt: null,
         keepRecordingsLocally: false,
         recordingRetentionDays: 0,
-        analyticsOptIn: false
+        analyticsOptIn: false,
+        speechRecognitionOptIn: false
       },
       onboardingCompleted: false,
       learningGoal: "conversation"
@@ -131,19 +138,26 @@ export interface KeyValueStore {
   removeItem(key: string): void;
 }
 
-interface LegacyLearnerProfileV1 {
-  learnerRef: string;
-  activeLanguage: string;
-  currentLevel: LingozaLevel;
-  completedLessonIds: ContentId[];
-  streak: StreakState;
-  preferences: LearnerPreferences;
-  privacy: PrivacySettings;
-}
+type LegacyPrivacySettings = Omit<PrivacySettings, "speechRecognitionOptIn">;
+
+type LegacyLearnerProfileV1 = Omit<LearnerProfile, "onboardingCompleted" | "learningGoal" | "privacy"> & {
+  privacy: LegacyPrivacySettings;
+};
 
 interface LegacyLearnerSnapshotV1 {
   schemaVersion: 1;
   profile: LegacyLearnerProfileV1;
+  mastery: MasteryState;
+  reviews: ReviewSchedule;
+}
+
+type LegacyLearnerProfileV2 = Omit<LearnerProfile, "privacy"> & {
+  privacy: LegacyPrivacySettings;
+};
+
+interface LegacyLearnerSnapshotV2 {
+  schemaVersion: 2;
+  profile: LegacyLearnerProfileV2;
   mastery: MasteryState;
   reviews: ReviewSchedule;
 }
@@ -153,11 +167,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Migrates the only previously shipped browser snapshot shape.
- *
- * Existing prototype users should not be forced through onboarding again or
- * lose mastery just because profile metadata grew. New installs still start
- * with onboarding incomplete via `createDefaultSnapshot`.
+ * Migrates all previously shipped browser snapshot shapes without deleting
+ * mastery/SRS data. New privacy capabilities are always opt-in.
  */
 export function migrateLearnerSnapshot(value: unknown): LearnerSnapshot | null {
   if (!isRecord(value) || typeof value.schemaVersion !== "number" || !isRecord(value.profile)) {
@@ -168,14 +179,21 @@ export function migrateLearnerSnapshot(value: unknown): LearnerSnapshot | null {
     return value as unknown as LearnerSnapshot;
   }
 
-  if (value.schemaVersion !== 1) return null;
+  if (value.schemaVersion !== 1 && value.schemaVersion !== 2) return null;
 
-  const legacy = value as unknown as LegacyLearnerSnapshotV1;
+  const legacy = value as unknown as LegacyLearnerSnapshotV1 | LegacyLearnerSnapshotV2;
   const defaults = createDefaultSnapshot(
     legacy.profile.learnerRef || "local",
     legacy.profile.activeLanguage || "zh-CN",
     legacy.profile.preferences?.locale ?? "vi-VN"
   );
+  const wasV1 = legacy.schemaVersion === 1;
+  const learningGoal =
+    !wasV1 && "learningGoal" in legacy.profile ? legacy.profile.learningGoal : "conversation";
+  const onboardingCompleted =
+    !wasV1 && "onboardingCompleted" in legacy.profile
+      ? legacy.profile.onboardingCompleted
+      : true;
 
   return {
     schemaVersion: LEARNER_SCHEMA_VERSION,
@@ -183,11 +201,14 @@ export function migrateLearnerSnapshot(value: unknown): LearnerSnapshot | null {
       ...defaults.profile,
       ...legacy.profile,
       preferences: { ...defaults.profile.preferences, ...legacy.profile.preferences },
-      privacy: { ...defaults.profile.privacy, ...legacy.profile.privacy },
-      // An existing learner already experienced the old app; do not interrupt
-      // them with first-run setup after upgrading storage.
-      onboardingCompleted: true,
-      learningGoal: "conversation"
+      privacy: {
+        ...defaults.profile.privacy,
+        ...legacy.profile.privacy,
+        // Existing users never silently opt into recognition that may leave-device.
+        speechRecognitionOptIn: false
+      },
+      onboardingCompleted,
+      learningGoal
     },
     mastery: legacy.mastery ?? {},
     reviews: legacy.reviews ?? {}
