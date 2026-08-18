@@ -1,11 +1,24 @@
 import type { ContentId } from "../packages/content-schema/src/index.js";
 import { chineseBundle } from "../language-packs/zh-CN/src/index.js";
 import { hskReferenceCatalog } from "../language-packs/zh-CN/src/hsk-reference.js";
+import {
+  HSK_PRODUCTION_PLAN,
+  LINGOZA_HSK_PARITY_GAPS,
+  LINGOZA_RUNTIME_CAPABILITY_DIMENSIONS,
+  HSK_STANDARD_CAPABILITY_DIMENSIONS,
+  productionPlanForBand,
+  validateHskProductionPlan
+} from "../language-packs/zh-CN/src/hsk-production-plan.js";
 
 const program = chineseBundle.programs?.find((candidate) => candidate.id === "zh.program.hsk");
 
 if (!program) {
   throw new Error("Chinese bundle has no zh.program.hsk roadmap.");
+}
+
+const productionPlanErrors = validateHskProductionPlan();
+if (productionPlanErrors.length > 0) {
+  throw new Error(`Invalid HSK production plan:\n${productionPlanErrors.join("\n")}`);
 }
 
 const courseById = new Map(chineseBundle.courses.map((course) => [course.id, course]));
@@ -44,12 +57,14 @@ const bands = program.bands.map((band) => {
     (item) => item.provenance.publishStatus === "PUBLISHED"
   ).length;
   const referenceEntries = hskReferenceCatalog.entries.filter((entry) => entry.band === band.ordinal);
+  const productionPlan = productionPlanForBand(band.ordinal);
 
   return {
     band: band.ordinal,
     label: band.label["vi-VN"] ?? band.label["en-US"],
     stage: band.stage,
     status: band.status,
+    syllabusBucket: productionPlan?.syllabusBucket ?? null,
     currentContribution: {
       courses: courses.length,
       units: units.length,
@@ -57,6 +72,8 @@ const bands = program.bands.map((band) => {
       concepts: concepts.length,
       lexicalItems: lexicalItems.length
     },
+    commercialProductionTarget: productionPlan?.productionTargets ?? null,
+    authoringThemes: productionPlan?.themes.length ?? 0,
     productionReadiness: {
       lexicalRecordingsReady: lexicalItems.length - missingLexicalRecordings,
       lexicalRecordingsMissing: missingLexicalRecordings,
@@ -84,11 +101,19 @@ console.log(
       alignmentReference: program.alignmentReference.reference,
       referenceCatalogStatus: hskReferenceCatalog.status,
       nineBandStructureValid: hasNineOrderedBands,
+      productionPlanBands: HSK_PRODUCTION_PLAN.length,
+      capabilityParity: {
+        externalStandardDimensions: HSK_STANDARD_CAPABILITY_DIMENSIONS,
+        learnerRuntimeDimensions: LINGOZA_RUNTIME_CAPABILITY_DIMENSIONS,
+        gaps: LINGOZA_HSK_PARITY_GAPS,
+        fullStandardParity: LINGOZA_HSK_PARITY_GAPS.length === 0
+      },
       policy: {
         certificationClaim: false,
         availableRequiresReferenceCoverage: true,
         availableRequiresProductionAudio: true,
-        availableRequiresHumanReview: true
+        availableRequiresHumanReview: true,
+        productionPlanIsOfficialRequirement: false
       },
       bands
     },
