@@ -11,11 +11,6 @@ import type {
  * There is exactly one playback slot. Starting a new target-language clip
  * stops anything already playing, so words, lesson prompts and dialogue never
  * talk over one another.
- *
- * Reviewed recordings are always preferred. Seed content that has not yet
- * received reviewed recordings may use host-device speech synthesis as an
- * explicit prototype fallback; `audio.available` remains false, so content QA
- * still reports the missing production asset.
  */
 
 export type PlaybackState = "idle" | "loading" | "playing";
@@ -31,6 +26,8 @@ export interface AudioManagerOptions {
   baseUrl: string;
   /** Language-pack path beneath the root, e.g. zh-CN. */
   basePath?: string;
+  /** Resolve authored text when a caller only knows an owner id. */
+  fallbackTextResolver?: (ownerId: ContentId) => string | undefined;
 }
 
 export interface PlayOptions {
@@ -127,6 +124,14 @@ export class AudioManager {
     }
 
     return undefined;
+  }
+
+  private fallbackTextFor(options: PlayOptions, speed: AudioSpeed): string | undefined {
+    return (
+      options.fallbackText?.trim() ||
+      this.fallbackTextFromAsset(options.asset, speed, options.segmentId) ||
+      this.options.fallbackTextResolver?.(options.ownerId)?.trim()
+    );
   }
 
   canPlay(asset: AudioAsset | undefined, fallbackText?: string): boolean {
@@ -227,8 +232,7 @@ export class AudioManager {
     const asset = options.asset;
     const track = asset ? this.trackFor(asset, speed) : null;
     const hasRecordedAudio = Boolean(track && asset?.available);
-    const fallbackText =
-      options.fallbackText?.trim() || this.fallbackTextFromAsset(asset, speed, options.segmentId);
+    const fallbackText = this.fallbackTextFor(options, speed);
 
     if (!hasRecordedAudio && !this.canSpeak(fallbackText)) {
       options.onEnded?.();
