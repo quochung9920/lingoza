@@ -1,4 +1,4 @@
-import { useCallback, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 
 import type {
   AudioAsset,
@@ -6,27 +6,29 @@ import type {
   ContentId,
   ExampleSentence,
   LanguageData,
-  LexicalItem
+  LexicalItem,
+  PartOfSpeech
 } from "../../../../packages/content-schema/src/index";
 import { useAudio } from "../app/audio-provider";
 import { useContent } from "../app/content-provider";
 import { useLearner } from "../app/learner-provider";
+import { BottomSheet } from "./primitives";
 import { ct, t } from "../lib/i18n";
 
 /**
  * The audio layer of the UI.
  *
- * `AudioButton` and `AudioText` make the Universal Audio Rule hold in
- * practice: target-language text is paired with a speaker everywhere it is
- * rendered through these content-aware components.
+ * Sentences keep progressive-disclosure preferences. Lexical items use a
+ * stricter learning contract: target text + reading aid are visible, while the
+ * Vietnamese meaning stays hidden until the learner taps the word. This keeps
+ * the listening/target-language association primary without making lookup
+ * inconvenient.
  */
 
 export interface AudioButtonProps {
   ownerId: ContentId;
   asset: AudioAsset | undefined;
-  /** The text being spoken and used to build the accessible name. */
   text: string;
-  /** BCP-47 language tag used by the device-TTS fallback. */
   lang?: string;
   speed?: AudioSpeed;
   segmentId?: string;
@@ -173,22 +175,14 @@ export interface AudioTextProps {
   text: string;
   asset: AudioAsset | undefined;
   lang?: string;
-  /** Pack-owned data keyed by LanguageProfile.supportLayers. */
   languageData?: LanguageData;
-  /** Generic fallback kept for imported content that only has romanization. */
   romanization?: string;
   translation?: string;
   size?: "sm" | "md" | "lg";
-  /** Force-show available support layers regardless of preference. */
   forceSupport?: boolean;
 }
 
-/**
- * Target-language text with its speaker, optional pack-declared reading aids
- * and translation. The component does not know what "pinyin", "romaji" or
- * "traditional" means: it renders support-layer keys declared by the active
- * language profile and looks their values up dynamically in `languageData`.
- */
+/** Generic sentence/phrase renderer whose support layers follow preferences. */
 export function AudioText({
   ownerId,
   text,
@@ -217,9 +211,6 @@ export function AudioText({
     return [];
   });
 
-  // Imported legacy content may have only the generic romanization field. It
-  // remains visible when support is forced, but new packs should populate
-  // languageData according to their declared support-layer keys.
   const fallbackRomanization = forceSupport && supportRows.length === 0 ? romanization : undefined;
   const sizeClass = size === "lg" ? " lz-target--lg" : size === "sm" ? " lz-target--sm" : "";
 
@@ -246,6 +237,138 @@ export function AudioText({
         size={size === "lg" ? "lg" : "md"}
       />
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Lexical detail                                                      */
+/* ------------------------------------------------------------------ */
+
+const POS_VI: Record<PartOfSpeech, string> = {
+  noun: "Danh từ",
+  verb: "Động từ",
+  adjective: "Tính từ",
+  adverb: "Trạng từ",
+  pronoun: "Đại từ",
+  numeral: "Số từ",
+  "measure-word": "Lượng từ",
+  particle: "Trợ từ",
+  preposition: "Giới từ",
+  conjunction: "Liên từ",
+  interjection: "Thán từ",
+  phrase: "Cụm từ"
+};
+
+function stringData(data: LanguageData | undefined, key: string): string | undefined {
+  const value = data?.[key];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function readingFor(item: LexicalItem): string | undefined {
+  return stringData(item.languageData, "pinyin") ?? item.romanization;
+}
+
+function WordDetailSheet({ item, open, onClose }: { item: LexicalItem; open: boolean; onClose: () => void }) {
+  const content = useContent();
+  const pinyin = readingFor(item);
+  const classifier = stringData(item.languageData, "classifier");
+  const traditional = stringData(item.languageData, "traditional");
+  const hskRaw = item.languageData?.hskReference;
+  const hsk = typeof hskRaw === "string" || typeof hskRaw === "number" ? String(hskRaw) : undefined;
+
+  const senses =
+    item.senses && item.senses.length > 0
+      ? item.senses
+      : [
+          {
+            id: `${item.id}.primary`,
+            gloss: item.meaning,
+            definition: item.meaning,
+            exampleSentenceIds: item.exampleSentenceIds
+          }
+        ];
+
+  const collocations = item.collocations
+    .map((id) => content.item(id))
+    .filter((entry): entry is LexicalItem => Boolean(entry));
+  const examples = item.exampleSentenceIds
+    .map((id) => content.sentence(id))
+    .filter((entry): entry is ExampleSentence => Boolean(entry));
+
+  return (
+    <BottomSheet open={open} title={`${item.text}${pinyin ? ` · ${pinyin}` : ""}`} onClose={onClose}>
+      <div className="lz-word-detail__hero">
+        <div>
+          <p className="lz-word-detail__hanzi" lang={item.language}>{item.text}</p>
+          {pinyin ? <p className="lz-word-detail__pinyin">{pinyin}</p> : null}
+        </div>
+        <AudioButton ownerId={item.id} asset={item.audio} text={item.text} lang={item.language} size="lg" />
+      </div>
+
+      <div className="lz-word-detail__badges">
+        <span className="lz-pill">{POS_VI[item.partOfSpeech]}</span>
+        <span className="lz-pill">{item.level}</span>
+        {classifier ? <span className="lz-pill">Lượng từ: {classifier}</span> : null}
+        {hsk ? <span className="lz-pill">HSK {hsk}</span> : null}
+      </div>
+
+      <div className="lz-word-detail__section">
+        <p className="lz-eyebrow">NGHĨA & CÁCH DÙNG</p>
+        {senses.map((sense, index) => (
+          <div className="lz-word-sense" key={sense.id}>
+            <div className="lz-word-sense__number">{index + 1}</div>
+            <div>
+              <strong>{t(sense.gloss)}</strong>
+              {sense.definition ? <p>{t(sense.definition)}</p> : null}
+              {sense.usageNote ? <p className="lz-muted">💡 {t(sense.usageNote)}</p> : null}
+            </div>
+          </div>
+        ))}
+        {item.usageNote ? <p className="lz-word-detail__note">💡 {t(item.usageNote)}</p> : null}
+        {traditional && traditional !== item.text ? (
+          <p className="lz-muted">Phồn thể: <strong>{traditional}</strong></p>
+        ) : null}
+      </div>
+
+      {collocations.length > 0 ? (
+        <div className="lz-word-detail__section">
+          <p className="lz-eyebrow">CỤM TỪ THÔNG DỤNG</p>
+          <div className="lz-word-detail__list">
+            {collocations.map((entry) => (
+              <div className="lz-word-detail__row" key={entry.id}>
+                <div>
+                  <strong lang={entry.language}>{entry.text}</strong>
+                  {readingFor(entry) ? <span>{readingFor(entry)}</span> : null}
+                  <small>{t(entry.meaning)}</small>
+                </div>
+                <AudioButton ownerId={entry.id} asset={entry.audio} text={entry.text} lang={entry.language} />
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {examples.length > 0 ? (
+        <div className="lz-word-detail__section">
+          <p className="lz-eyebrow">VÍ DỤ</p>
+          <div className="lz-word-detail__list">
+            {examples.slice(0, 4).map((sentence) => (
+              <AudioText
+                key={sentence.id}
+                ownerId={sentence.id}
+                text={sentence.text}
+                asset={sentence.audio}
+                lang={sentence.language}
+                languageData={sentence.languageData}
+                romanization={sentence.romanization}
+                translation={t(sentence.translation)}
+                forceSupport
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </BottomSheet>
   );
 }
 
@@ -278,27 +401,47 @@ export function SentenceText({
   );
 }
 
+/**
+ * Lexical items always show their reading directly below the target word. The
+ * Vietnamese meaning is intentionally absent from the resting state; tapping
+ * the word opens the richer lexical detail sheet instead.
+ */
 export function ItemText({
   item,
-  size = "md",
-  forceSupport
+  size = "md"
 }: {
   item: LexicalItem | undefined;
   size?: AudioTextProps["size"];
   forceSupport?: boolean;
 }) {
+  const [open, setOpen] = useState(false);
   if (!item) return null;
+
+  const pinyin = readingFor(item);
+  const sizeClass = size === "lg" ? " lz-target--lg" : size === "sm" ? " lz-target--sm" : "";
+
   return (
-    <AudioText
-      ownerId={item.id}
-      text={item.text}
-      asset={item.audio}
-      lang={item.language}
-      languageData={item.languageData}
-      romanization={item.romanization}
-      translation={t(item.meaning)}
-      size={size}
-      forceSupport={forceSupport}
-    />
+    <>
+      <div className="lz-lexical-item">
+        <button
+          type="button"
+          className="lz-lexical-item__trigger"
+          onClick={() => setOpen(true)}
+          aria-label={`${item.text}${pinyin ? `, ${pinyin}` : ""}. Chạm để xem nghĩa tiếng Việt.`}
+        >
+          <span className={`lz-target${sizeClass}`} lang={item.language}>{item.text}</span>
+          {pinyin ? <span className="lz-lexical-item__pinyin">{pinyin}</span> : null}
+          <span className="lz-lexical-item__hint">Chạm để xem nghĩa</span>
+        </button>
+        <AudioButton
+          ownerId={item.id}
+          asset={item.audio}
+          text={item.text}
+          lang={item.language}
+          size={size === "lg" ? "lg" : "md"}
+        />
+      </div>
+      <WordDetailSheet item={item} open={open} onClose={() => setOpen(false)} />
+    </>
   );
 }
