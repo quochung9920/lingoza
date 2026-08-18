@@ -17,15 +17,16 @@ import { ct, t } from "../lib/i18n";
  * `AudioButton` and `AudioText` are the components that make the Universal
  * Audio Rule hold in practice: no screen renders target-language text as a bare
  * string, it renders an `AudioText`, and an `AudioText` cannot exist without a
- * speaker. Getting this wrong is therefore a missing import, not a missed
- * design review.
+ * speaker.
  */
 
 export interface AudioButtonProps {
   ownerId: ContentId;
   asset: AudioAsset | undefined;
-  /** The text being spoken, used to build the accessible name. */
+  /** The text being spoken and used to build the accessible name. */
   text: string;
+  /** BCP-47 language tag used by the device-TTS fallback. */
+  lang?: string;
   speed?: AudioSpeed;
   segmentId?: string;
   size?: "md" | "lg";
@@ -33,29 +34,39 @@ export interface AudioButtonProps {
 }
 
 /**
- * The speaker button.
+ * The universal speaker button.
  *
- * When no recording exists yet it stays rendered, disabled and labelled, rather
- * than vanishing: a learner should be able to see that a line *has* audio
- * coming, and a silently absent speaker looks like a bug in the layout.
+ * Reviewed audio is preferred. Seed content whose recording is still marked
+ * unavailable falls back to the host device's speech synthesis when supported,
+ * so the learner can tap every speaker during development/testing without
+ * changing the content's production-review status.
  */
 export function AudioButton({
   ownerId,
   asset,
   text,
+  lang = "zh-CN",
   speed = "normal",
   segmentId,
   size = "md",
   onPlayed
 }: AudioButtonProps) {
   const { manager, isPlaying, canPlay } = useAudio();
-  const playable = canPlay(asset);
+  const playable = canPlay(asset, text);
   const playing = isPlaying(ownerId, speed, segmentId);
 
   const handleClick = useCallback(() => {
-    if (!asset || !playable) return;
-    void manager.play({ ownerId, asset, speed, segmentId, onEnded: onPlayed });
-  }, [asset, playable, manager, ownerId, speed, segmentId, onPlayed]);
+    if (!playable) return;
+    void manager.play({
+      ownerId,
+      asset,
+      speed,
+      segmentId,
+      fallbackText: text,
+      lang,
+      onEnded: onPlayed
+    });
+  }, [asset, playable, manager, ownerId, speed, segmentId, text, lang, onPlayed]);
 
   const action = speed === "slow" ? ct("audio.playSlow") : ct("audio.play");
   const label = playable ? `${action}: ${text}` : `${ct("audio.unavailable")}: ${text}`;
@@ -81,14 +92,16 @@ export function AudioButton({
 export function SlowAudioButton({
   ownerId,
   asset,
-  text
+  text,
+  lang = "zh-CN"
 }: {
   ownerId: ContentId;
   asset: AudioAsset | undefined;
   text: string;
+  lang?: string;
 }) {
   const { manager, isPlaying, canPlay } = useAudio();
-  const playable = canPlay(asset);
+  const playable = canPlay(asset, text);
   const playing = isPlaying(ownerId, "slow");
 
   return (
@@ -98,7 +111,16 @@ export function SlowAudioButton({
       aria-pressed={playing}
       aria-label={`${ct("audio.playSlow")}: ${text}`}
       disabled={!playable}
-      onClick={() => asset && manager.play({ ownerId, asset, speed: "slow" })}
+      onClick={() =>
+        playable &&
+        manager.play({
+          ownerId,
+          asset,
+          speed: "slow",
+          fallbackText: text,
+          lang
+        })
+      }
     >
       <span aria-hidden="true">🐢</span>
       {ct("audio.slowLabel")}
@@ -111,25 +133,36 @@ export function AudioControls({
   ownerId,
   asset,
   text,
+  lang = "zh-CN",
   extra
 }: {
   ownerId: ContentId;
   asset: AudioAsset | undefined;
   text: string;
+  lang?: string;
   extra?: ReactNode;
 }) {
   const { manager, canPlay } = useAudio();
-  const playable = canPlay(asset);
+  const playable = canPlay(asset, text);
 
   return (
     <div className="lz-audio-controls">
-      <SlowAudioButton ownerId={ownerId} asset={asset} text={text} />
+      <SlowAudioButton ownerId={ownerId} asset={asset} text={text} lang={lang} />
       <button
         type="button"
         className="lz-chip-btn"
         aria-label={`${ct("audio.replay")}: ${text}`}
         disabled={!playable}
-        onClick={() => asset && manager.play({ ownerId, asset, speed: "normal" })}
+        onClick={() =>
+          playable &&
+          manager.play({
+            ownerId,
+            asset,
+            speed: "normal",
+            fallbackText: text,
+            lang
+          })
+        }
       >
         <span aria-hidden="true">🔁</span>
         {ct("audio.replay")}
@@ -147,6 +180,7 @@ export interface AudioTextProps {
   ownerId: ContentId;
   text: string;
   asset: AudioAsset | undefined;
+  lang?: string;
   romanization?: string;
   translation?: string;
   size?: "sm" | "md" | "lg";
@@ -165,6 +199,7 @@ export function AudioText({
   ownerId,
   text,
   asset,
+  lang = "zh-CN",
   romanization,
   translation,
   size = "md",
@@ -181,8 +216,7 @@ export function AudioText({
   return (
     <div className="lz-audio-text">
       <div className="lz-audio-text__body">
-        {/* `lang` lets the browser pick correct glyph forms and voices. */}
-        <p className={`lz-target${sizeClass}`} lang="zh-CN">
+        <p className={`lz-target${sizeClass}`} lang={lang}>
           {text}
         </p>
         {showRomanization && romanization ? <p className="lz-romanization">{romanization}</p> : null}
@@ -192,6 +226,7 @@ export function AudioText({
         ownerId={ownerId}
         asset={asset}
         text={text}
+        lang={lang}
         size={size === "lg" ? "lg" : "md"}
       />
     </div>
@@ -218,6 +253,7 @@ export function SentenceText({
       ownerId={sentence.id}
       text={sentence.text}
       asset={sentence.audio}
+      lang={sentence.language}
       romanization={sentence.romanization}
       translation={t(sentence.translation)}
       size={size}
@@ -242,6 +278,7 @@ export function ItemText({
       ownerId={item.id}
       text={item.text}
       asset={item.audio}
+      lang={item.language}
       romanization={item.romanization}
       translation={t(item.meaning)}
       size={size}
