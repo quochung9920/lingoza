@@ -158,7 +158,7 @@ function VerificationFeedback({
 
   if (verification.content === "matched") {
     return (
-      <FeedbackPanel tone="success" title={ct("speak.contentMatched")}>
+      <FeedbackPanel tone="positive" title={ct("speak.contentMatched")}>
         {verification.recognizedText ? (
           <p className="lz-muted">
             {ct("speak.recognizedAs")}: <strong lang="zh-CN">{verification.recognizedText}</strong>
