@@ -4,11 +4,12 @@ import type {
 } from "../../../../packages/pronunciation-engine/src/index";
 
 /**
- * Browser client for Lingoza's pronunciation gateway.
+ * Browser-side seam for advanced pronunciation assessment.
  *
- * The gateway URL is configuration, not a provider secret. Azure or any future
- * provider credential stays on the server. No request is made unless the
- * learner explicitly enabled advanced pronunciation assessment.
+ * The app depends on this provider contract, not on Azure. The default provider
+ * talks to Lingoza's server-side gateway; Azure, a future self-hosted aligner,
+ * or an on-device implementation can be swapped behind the same interface.
+ * Provider secrets never belong in this client module.
  */
 
 const SPEECH_ASSESSMENT_URL = (
@@ -41,6 +42,12 @@ export interface PronunciationGatewayRequest {
   targetText: string;
   language: string;
   targetId: string;
+}
+
+export interface PronunciationAssessmentProvider {
+  readonly id: string;
+  readonly configured: boolean;
+  assess(request: PronunciationGatewayRequest): Promise<PronunciationGatewayResult | null>;
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -138,35 +145,48 @@ function normalizeGatewayResult(value: unknown): PronunciationGatewayResult | nu
   };
 }
 
-export function isAdvancedPronunciationConfigured(): boolean {
-  return Boolean(SPEECH_ASSESSMENT_URL);
+export function createGatewayPronunciationProvider(
+  endpoint = SPEECH_ASSESSMENT_URL
+): PronunciationAssessmentProvider {
+  const url = endpoint?.trim();
+  return {
+    id: "lingoza-speech-gateway",
+    configured: Boolean(url),
+
+    async assess(request) {
+      if (!url) return null;
+
+      const bytes = new Uint8Array(await request.audio.arrayBuffer());
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json"
+        },
+        body: JSON.stringify({
+          targetId: request.targetId,
+          targetText: request.targetText,
+          language: request.language,
+          contentType: "audio/wav; codecs=audio/pcm; samplerate=16000",
+          audioBase64: bytesToBase64(bytes)
+        })
+      });
+
+      if (!response.ok) return null;
+      return normalizeGatewayResult((await response.json()) as unknown);
+    }
+  };
 }
 
-/**
- * Sends one short PCM WAV attempt to the configured Lingoza backend.
- * The endpoint is expected to be same-origin or CORS-enabled by deployment.
- */
-export async function assessPronunciationWithGateway(
+export const gatewayPronunciationProvider = createGatewayPronunciationProvider();
+
+export function isAdvancedPronunciationConfigured(): boolean {
+  return gatewayPronunciationProvider.configured;
+}
+
+/** Convenience wrapper used by the current speaking surface. */
+export function assessPronunciationWithGateway(
   request: PronunciationGatewayRequest
 ): Promise<PronunciationGatewayResult | null> {
-  if (!SPEECH_ASSESSMENT_URL) return null;
-
-  const bytes = new Uint8Array(await request.audio.arrayBuffer());
-  const response = await fetch(SPEECH_ASSESSMENT_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json"
-    },
-    body: JSON.stringify({
-      targetId: request.targetId,
-      targetText: request.targetText,
-      language: request.language,
-      contentType: "audio/wav; codecs=audio/pcm; samplerate=16000",
-      audioBase64: bytesToBase64(bytes)
-    })
-  });
-
-  if (!response.ok) return null;
-  return normalizeGatewayResult((await response.json()) as unknown);
+  return gatewayPronunciationProvider.assess(request);
 }
