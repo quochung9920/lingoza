@@ -13,10 +13,12 @@ import type {
  * structural rather than a thing each screen has to remember: starting a new
  * clip stops whatever was playing, because there is only one playback slot.
  *
- * `HTMLAudioElement` is used directly rather than Web Audio: the Mini App
- * webview handles it more predictably, and nothing here needs a graph.
- * `SpeechSynthesis` is deliberately never used -- see `placeholderAudio` in the
- * language pack for why.
+ * Recorded audio remains the preferred source. While authored seed content is
+ * waiting for reviewed recordings, the controller can fall back to the host
+ * device's speech-synthesis capability so speaker buttons stay functional in
+ * development and internal testing. The content asset still remains marked
+ * unavailable, so this fallback never disguises missing production audio from
+ * validation/review workflows.
  */
 
 export type PlaybackState = "idle" | "loading" | "playing";
@@ -30,19 +32,22 @@ export interface NowPlaying {
 
 export interface AudioManagerOptions {
   /**
-   * Base URL for audio assets. Assets are served from object storage/CDN and
-   * are never bundled into the Mini App: a full course of recordings would
-   * dwarf the JS budget many times over.
+   * Base URL for reviewed audio assets. Assets are served from object storage /
+   * CDN and are not bundled into the Mini App.
    */
   baseUrl: string;
 }
 
 export interface PlayOptions {
   ownerId: ContentId;
-  asset: AudioAsset;
+  asset?: AudioAsset;
   speed?: AudioSpeed;
-  /** Play only this segment of the clip (shadowing build-up). */
+  /** Play only this segment of a recorded clip (shadowing build-up). */
   segmentId?: string;
+  /** Text used by the device-TTS fallback when no reviewed recording exists. */
+  fallbackText?: string;
+  /** BCP-47 language tag used by device TTS, e.g. zh-CN. */
+  lang?: string;
   /** Called when playback finishes or is superseded. */
   onEnded?: () => void;
 }
@@ -51,6 +56,7 @@ type Listener = (state: PlaybackState, playing: NowPlaying | null) => void;
 
 export class AudioManager {
   private element: HTMLAudioElement | null = null;
+  private utterance: SpeechSynthesisUtterance | null = null;
   private state: PlaybackState = "idle";
   private playing: NowPlaying | null = null;
   private listeners = new Set<Listener>();
@@ -83,35 +89,113 @@ export class AudioManager {
     return asset.normal ?? null;
   }
 
+  private speechSynthesis(): SpeechSynthesis | null {
+    if (typeof window === "undefined") return null;
+    if (!("speechSynthesis" in window)) return null;
+    if (typeof SpeechSynthesisUtterance === "undefined") return null;
+    return window.speechSynthesis;
+  }
+
+  private canSpeak(text?: string): boolean {
+    return Boolean(text?.trim() && this.speechSynthesis());
+  }
+
   /**
-   * Whether this asset can actually be played.
+   * Whether a speaker can produce sound right now.
    *
-   * Screens call this to render an audio button in its unavailable state --
-   * still present, still labelled -- instead of hiding it. Hiding the speaker
-   * would quietly break the Universal Audio Rule wherever recordings lag
-   * behind authoring.
+   * Reviewed recordings win. If they are not available yet, target-language
+   * text can still be spoken through the device speech engine when the host
+   * WebView/browser exposes it.
    */
-  canPlay(asset: AudioAsset | undefined): boolean {
-    return Boolean(asset?.available && asset.normal?.src);
+  canPlay(asset: AudioAsset | undefined, fallbackText?: string): boolean {
+    const hasRecordedAudio = Boolean(asset?.available && asset.normal?.src);
+    return hasRecordedAudio || this.canSpeak(fallbackText);
   }
 
   stop(): void {
     this.currentToken += 1;
     this.segmentStopAt = null;
+
     if (this.element) {
       this.element.pause();
       this.element.src = "";
       this.element = null;
     }
+
+    if (this.utterance) {
+      this.speechSynthesis()?.cancel();
+      this.utterance = null;
+    }
+
     this.emit("idle", null);
+  }
+
+  private chooseVoice(lang: string): SpeechSynthesisVoice | undefined {
+    const synth = this.speechSynthesis();
+    if (!synth) return undefined;
+
+    const voices = synth.getVoices();
+    const wanted = lang.toLowerCase();
+    const language = wanted.split("-")[0];
+
+    return (
+      voices.find((voice) => voice.lang.toLowerCase() === wanted) ??
+      voices.find((voice) => voice.lang.toLowerCase().startsWith(`${language}-`)) ??
+      voices.find((voice) => voice.lang.toLowerCase() === language)
+    );
+  }
+
+  private speakFallback(
+    options: PlayOptions,
+    speed: AudioSpeed,
+    nowPlaying: NowPlaying,
+    token: number
+  ): void {
+    const synth = this.speechSynthesis();
+    const text = options.fallbackText?.trim();
+
+    if (!synth || !text) {
+      options.onEnded?.();
+      return;
+    }
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    const lang = options.lang ?? "zh-CN";
+    utterance.lang = lang;
+    utterance.rate = speed === "slow" ? 0.72 : 0.95;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+
+    const voice = this.chooseVoice(lang);
+    if (voice) utterance.voice = voice;
+
+    const finish = () => {
+      if (token !== this.currentToken) return;
+      this.stop();
+      options.onEnded?.();
+    };
+
+    utterance.onend = finish;
+    utterance.onerror = finish;
+    this.utterance = utterance;
+
+    try {
+      // This call originates from the learner's tap, which is important on
+      // mobile WebViews that gate audible playback behind a user gesture.
+      synth.cancel();
+      synth.speak(utterance);
+      if (token === this.currentToken) this.emit("playing", nowPlaying);
+    } catch {
+      finish();
+    }
   }
 
   /**
    * Plays a clip, stopping anything already playing.
    *
    * Tapping the speaker that is currently playing stops it rather than
-   * restarting: on a phone, the second tap is almost always "that's enough",
-   * and a replay is one more tap away.
+   * restarting. If a reviewed recording is not available, device TTS is used
+   * as a temporary seed-content fallback when supported by the host.
    */
   async play(options: PlayOptions): Promise<void> {
     const speed = options.speed ?? "normal";
@@ -127,10 +211,11 @@ export class AudioManager {
 
     this.stop();
 
-    const track = this.trackFor(options.asset, speed);
-    if (!track || !options.asset.available) {
-      // Nothing to play. Report it as a completed no-op so callers that chain
-      // (autoplay, shadowing sequences) don't stall waiting for an end event.
+    const asset = options.asset;
+    const track = asset ? this.trackFor(asset, speed) : null;
+    const hasRecordedAudio = Boolean(track && asset?.available);
+
+    if (!hasRecordedAudio && !this.canSpeak(options.fallbackText)) {
       options.onEnded?.();
       return;
     }
@@ -142,6 +227,11 @@ export class AudioManager {
       segmentId: options.segmentId
     };
     this.emit("loading", nowPlaying);
+
+    if (!hasRecordedAudio || !track || !asset) {
+      this.speakFallback(options, speed, nowPlaying, token);
+      return;
+    }
 
     const element = new Audio();
     element.preload = "auto";
@@ -173,18 +263,11 @@ export class AudioManager {
       if (token !== this.currentToken) return;
       this.emit("playing", nowPlaying);
     } catch {
-      // Autoplay refusal or a missing file. Both mean "no sound happened",
-      // which is a normal state here, not an error worth surfacing.
       finish();
     }
   }
 
-  /**
-   * Warms the browser cache for a clip the learner is about to need.
-   *
-   * Only ever called for the *next* item, never for a whole lesson: preloading
-   * a unit's worth of audio on a mobile connection costs more than it saves.
-   */
+  /** Warm the browser cache for the next reviewed recording only. */
   preload(asset: AudioAsset | undefined, speed: AudioSpeed = "normal"): void {
     if (!asset?.available) return;
     const track = this.trackFor(asset, speed);
