@@ -100,6 +100,35 @@ export class AudioManager {
     return Boolean(text?.trim() && this.speechSynthesis());
   }
 
+  private fallbackTextFromAsset(
+    asset: AudioAsset | undefined,
+    speed: AudioSpeed,
+    segmentId?: string
+  ): string | undefined {
+    if (!asset) return undefined;
+
+    const preferred = this.trackFor(asset, speed);
+    const segmentSources = [preferred?.segments, asset.normal?.segments, asset.slow?.segments];
+
+    if (segmentId) {
+      for (const segments of segmentSources) {
+        const text = segments?.find((segment) => segment.id === segmentId)?.text?.trim();
+        if (text) return text;
+      }
+      return undefined;
+    }
+
+    for (const segments of segmentSources) {
+      const text = segments
+        ?.map((segment) => segment.text.trim())
+        .filter(Boolean)
+        .join("");
+      if (text) return text;
+    }
+
+    return undefined;
+  }
+
   /**
    * Whether a speaker can produce sound right now.
    *
@@ -147,12 +176,13 @@ export class AudioManager {
 
   private speakFallback(
     options: PlayOptions,
+    fallbackText: string,
     speed: AudioSpeed,
     nowPlaying: NowPlaying,
     token: number
   ): void {
     const synth = this.speechSynthesis();
-    const text = options.fallbackText?.trim();
+    const text = fallbackText.trim();
 
     if (!synth || !text) {
       options.onEnded?.();
@@ -180,9 +210,8 @@ export class AudioManager {
     this.utterance = utterance;
 
     try {
-      // This call originates from the learner's tap, which is important on
-      // mobile WebViews that gate audible playback behind a user gesture.
-      synth.cancel();
+      // The call is initiated from the learner's tap for manual playback. Some
+      // hosts also allow autoplay, but the learning flow never depends on it.
       synth.speak(utterance);
       if (token === this.currentToken) this.emit("playing", nowPlaying);
     } catch {
@@ -214,8 +243,10 @@ export class AudioManager {
     const asset = options.asset;
     const track = asset ? this.trackFor(asset, speed) : null;
     const hasRecordedAudio = Boolean(track && asset?.available);
+    const fallbackText =
+      options.fallbackText?.trim() || this.fallbackTextFromAsset(asset, speed, options.segmentId);
 
-    if (!hasRecordedAudio && !this.canSpeak(options.fallbackText)) {
+    if (!hasRecordedAudio && !this.canSpeak(fallbackText)) {
       options.onEnded?.();
       return;
     }
@@ -229,7 +260,8 @@ export class AudioManager {
     this.emit("loading", nowPlaying);
 
     if (!hasRecordedAudio || !track || !asset) {
-      this.speakFallback(options, speed, nowPlaying, token);
+      if (fallbackText) this.speakFallback(options, fallbackText, speed, nowPlaying, token);
+      else options.onEnded?.();
       return;
     }
 
