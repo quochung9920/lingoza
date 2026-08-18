@@ -47,7 +47,9 @@ function AppContent() {
     );
   }
 
-  const nav = <BottomNav active={route.name === "tab" ? route.tab : "learn"} onChange={selectTab} />;
+  const activeTab: TabId =
+    route.name === "tab" ? route.tab : route.name === "settings" ? "progress" : "learn";
+  const nav = <BottomNav active={activeTab} onChange={selectTab} />;
 
   if (route.name === "settings") {
     return (
