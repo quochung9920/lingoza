@@ -1,0 +1,1 @@
+# Lingoza documentation
