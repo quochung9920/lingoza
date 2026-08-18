@@ -3,30 +3,24 @@ import { useCallback, useState } from "react";
 import type { ContentId } from "../../../packages/content-schema/src/index";
 import { AudioProvider } from "./app/audio-provider";
 import { ContentProvider } from "./app/content-provider";
-import { LearnerProvider } from "./app/learner-provider";
+import { LearnerProvider, useLearner } from "./app/learner-provider";
 import { ErrorState, LoadingState } from "./components/primitives";
 import { AppShell, BottomNav, MiniAppSafeHeader, type TabId } from "./components/shell";
 import { ct } from "./lib/i18n";
 import { HomeScreen } from "./screens/HomeScreen";
 import { LessonPlayer } from "./screens/LessonPlayer";
+import { OnboardingScreen } from "./screens/OnboardingScreen";
 import { ConversationScreen, PracticeScreen, ProgressScreen } from "./screens/PracticeScreens";
+import { TopicScreen } from "./screens/TopicScreen";
 import { CourseMapScreen, UnitScreen } from "./screens/UnitScreen";
-
-/**
- * Root component and navigation.
- *
- * Navigation is a small explicit stack rather than a router. A Mini App has no
- * URL bar and no browser Back, so the only thing a router would buy is a
- * dependency; what actually matters is that Back always pops one level, which
- * a stack gives directly.
- */
 
 type Route =
   | { name: "tab"; tab: TabId }
   | { name: "course" }
   | { name: "unit"; unitId: ContentId }
   | { name: "lesson"; lessonId: ContentId }
-  | { name: "topic"; topicId: ContentId };
+  | { name: "topic"; topicId: ContentId }
+  | { name: "scenario"; scenarioId: ContentId };
 
 function AppContent() {
   const [stack, setStack] = useState<Route[]>([{ name: "tab", tab: "learn" }]);
@@ -39,9 +33,16 @@ function AppContent() {
   );
   const selectTab = useCallback((tab: TabId) => setStack([{ name: "tab", tab }]), []);
 
-  /* The lesson player owns the whole viewport: no shell, no bottom nav. */
   if (route.name === "lesson") {
     return <LessonPlayer lessonId={route.lessonId} onExit={pop} />;
+  }
+
+  if (route.name === "scenario") {
+    return (
+      <AppShell header={<MiniAppSafeHeader title={ct("nav.talk")} />}>
+        <ConversationScreen initialScenarioId={route.scenarioId} onExitScenario={pop} />
+      </AppShell>
+    );
   }
 
   const nav = <BottomNav active={route.name === "tab" ? route.tab : "learn"} onChange={selectTab} />;
@@ -60,7 +61,20 @@ function AppContent() {
     );
   }
 
-  if (route.name === "course" || route.name === "topic") {
+  if (route.name === "topic") {
+    return (
+      <AppShell header={<MiniAppSafeHeader title="Chủ đề" onBack={pop} bordered />} nav={nav}>
+        <TopicScreen
+          topicId={route.topicId}
+          onOpenUnit={(unitId) => push({ name: "unit", unitId })}
+          onOpenLesson={(lessonId) => push({ name: "lesson", lessonId })}
+          onOpenScenario={(scenarioId) => push({ name: "scenario", scenarioId })}
+        />
+      </AppShell>
+    );
+  }
+
+  if (route.name === "course") {
     return (
       <AppShell header={<MiniAppSafeHeader title="Lộ trình" onBack={pop} bordered />} nav={nav}>
         <CourseMapScreen onOpenUnit={(unitId) => push({ name: "unit", unitId })} />
@@ -94,6 +108,7 @@ function AppContent() {
           <HomeScreen
             onOpenLesson={(lessonId) => push({ name: "lesson", lessonId })}
             onOpenUnit={(unitId) => push({ name: "unit", unitId })}
+            onOpenCourse={() => push({ name: "course" })}
             onOpenReview={() => selectTab("speak")}
             onOpenTopic={(topicId) => push({ name: "topic", topicId })}
           />
@@ -102,29 +117,49 @@ function AppContent() {
   }
 }
 
+function LearnerApp() {
+  const { snapshot, hydrated, completeOnboarding } = useLearner();
+
+  if (!hydrated) {
+    return (
+      <AppShell header={<MiniAppSafeHeader title="Lingoza" />}>
+        <LoadingState label="Đang khôi phục tiến độ học…" />
+      </AppShell>
+    );
+  }
+
+  if (!snapshot.profile.onboardingCompleted) {
+    return <OnboardingScreen onComplete={completeOnboarding} />;
+  }
+
+  return (
+    <AudioProvider>
+      <ContentProvider
+        fallback={
+          <AppShell header={<MiniAppSafeHeader title="Lingoza" />}>
+            <LoadingState />
+          </AppShell>
+        }
+        errorState={(retry) => (
+          <AppShell header={<MiniAppSafeHeader title="Lingoza" />}>
+            <ErrorState
+              title={ct("error.contentTitle")}
+              body={ct("error.contentBody")}
+              onRetry={retry}
+            />
+          </AppShell>
+        )}
+      >
+        <AppContent />
+      </ContentProvider>
+    </AudioProvider>
+  );
+}
+
 export default function App() {
   return (
     <LearnerProvider>
-      <AudioProvider>
-        <ContentProvider
-          fallback={
-            <AppShell header={<MiniAppSafeHeader title="Lingoza" />}>
-              <LoadingState />
-            </AppShell>
-          }
-          errorState={(retry) => (
-            <AppShell header={<MiniAppSafeHeader title="Lingoza" />}>
-              <ErrorState
-                title={ct("error.contentTitle")}
-                body={ct("error.contentBody")}
-                onRetry={retry}
-              />
-            </AppShell>
-          )}
-        >
-          <AppContent />
-        </ContentProvider>
-      </AudioProvider>
+      <LearnerApp />
     </LearnerProvider>
   );
 }
