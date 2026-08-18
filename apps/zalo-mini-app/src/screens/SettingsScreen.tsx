@@ -34,9 +34,8 @@ function ToggleRow({
 }
 
 export function SettingsScreen() {
-  const { snapshot, updatePreferences, updatePrivacy } = useLearner();
+  const { snapshot, updatePreferences } = useLearner();
   const preferences = snapshot.profile.preferences;
-  const privacy = snapshot.profile.privacy;
   const showPinyin = preferences.visibleSupportLayers.includes("pinyin");
 
   const setPinyin = (enabled: boolean) => {
@@ -112,19 +111,11 @@ export function SettingsScreen() {
 
       <Card>
         <SectionHeading title="Quyền riêng tư khi luyện nói" />
-        <div className="lz-settings-group">
-          <ToggleRow
-            title="Cho phép analytics học tập"
-            body="Chỉ cho phép các sự kiện học tập không chứa bản ghi âm hay nội dung bạn nói."
-            checked={privacy.analyticsOptIn}
-            onChange={(analyticsOptIn) => updatePrivacy({ analyticsOptIn })}
-          />
-          <div className="lz-setting-note">
-            <span aria-hidden="true">🔒</span>
-            <p>
-              Bản ghi luyện nói mặc định không được lưu lâu dài. Hiện tại Lingoza xử lý trên thiết bị và loại bỏ bản ghi sau lượt luyện.
-            </p>
-          </div>
+        <div className="lz-setting-note">
+          <span aria-hidden="true">🔒</span>
+          <p>
+            Bản ghi luyện nói mặc định không được lưu lâu dài. Hiện tại Lingoza xử lý trên thiết bị và loại bỏ bản ghi sau lượt luyện. Analytics mạng cũng chưa được bật trong bản hiện tại.
+          </p>
         </div>
       </Card>
     </div>
