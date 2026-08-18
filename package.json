@@ -14,7 +14,8 @@
     "zalo:init": "npm --prefix apps/zalo-mini-app run zalo:init",
     "zalo:login": "npm --prefix apps/zalo-mini-app run zalo:login",
     "zalo:deploy": "npm --prefix apps/zalo-mini-app run zalo:deploy",
-    "validate:content": "npm run build && node dist/tools/validate-content.js"
+    "validate:content": "npm run build && node dist/tools/validate-content.js",
+    "report:content": "npm run build && node dist/tools/content-report.js"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
