@@ -38,6 +38,12 @@ export interface PrivacySettings {
    * speech off-device.
    */
   speechRecognitionOptIn: boolean;
+  /**
+   * Allows a short practice recording to be sent to Lingoza's speech gateway
+   * and its configured pronunciation provider for phoneme-level assessment.
+   * This is separate from browser recognition and is always opt-in.
+   */
+  advancedPronunciationOptIn: boolean;
 }
 
 export interface StreakState {
@@ -70,7 +76,7 @@ export interface LearnerSnapshot {
   schemaVersion: number;
 }
 
-export const LEARNER_SCHEMA_VERSION = 3;
+export const LEARNER_SCHEMA_VERSION = 4;
 
 export interface LearnerRepository {
   load(): Promise<LearnerSnapshot | null>;
@@ -105,7 +111,8 @@ export function createDefaultSnapshot(
         keepRecordingsLocally: false,
         recordingRetentionDays: 0,
         analyticsOptIn: false,
-        speechRecognitionOptIn: false
+        speechRecognitionOptIn: false,
+        advancedPronunciationOptIn: false
       },
       onboardingCompleted: false,
       learningGoal: "conversation"
@@ -138,10 +145,14 @@ export interface KeyValueStore {
   removeItem(key: string): void;
 }
 
-type LegacyPrivacySettings = Omit<PrivacySettings, "speechRecognitionOptIn">;
+type LegacyPrivacySettingsV1V2 = Omit<
+  PrivacySettings,
+  "speechRecognitionOptIn" | "advancedPronunciationOptIn"
+>;
+type LegacyPrivacySettingsV3 = Omit<PrivacySettings, "advancedPronunciationOptIn">;
 
 type LegacyLearnerProfileV1 = Omit<LearnerProfile, "onboardingCompleted" | "learningGoal" | "privacy"> & {
-  privacy: LegacyPrivacySettings;
+  privacy: LegacyPrivacySettingsV1V2;
 };
 
 interface LegacyLearnerSnapshotV1 {
@@ -152,12 +163,23 @@ interface LegacyLearnerSnapshotV1 {
 }
 
 type LegacyLearnerProfileV2 = Omit<LearnerProfile, "privacy"> & {
-  privacy: LegacyPrivacySettings;
+  privacy: LegacyPrivacySettingsV1V2;
 };
 
 interface LegacyLearnerSnapshotV2 {
   schemaVersion: 2;
   profile: LegacyLearnerProfileV2;
+  mastery: MasteryState;
+  reviews: ReviewSchedule;
+}
+
+type LegacyLearnerProfileV3 = Omit<LearnerProfile, "privacy"> & {
+  privacy: LegacyPrivacySettingsV3;
+};
+
+interface LegacyLearnerSnapshotV3 {
+  schemaVersion: 3;
+  profile: LegacyLearnerProfileV3;
   mastery: MasteryState;
   reviews: ReviewSchedule;
 }
@@ -179,9 +201,12 @@ export function migrateLearnerSnapshot(value: unknown): LearnerSnapshot | null {
     return value as unknown as LearnerSnapshot;
   }
 
-  if (value.schemaVersion !== 1 && value.schemaVersion !== 2) return null;
+  if (value.schemaVersion !== 1 && value.schemaVersion !== 2 && value.schemaVersion !== 3) return null;
 
-  const legacy = value as unknown as LegacyLearnerSnapshotV1 | LegacyLearnerSnapshotV2;
+  const legacy = value as unknown as
+    | LegacyLearnerSnapshotV1
+    | LegacyLearnerSnapshotV2
+    | LegacyLearnerSnapshotV3;
   const defaults = createDefaultSnapshot(
     legacy.profile.learnerRef || "local",
     legacy.profile.activeLanguage || "zh-CN",
@@ -204,8 +229,10 @@ export function migrateLearnerSnapshot(value: unknown): LearnerSnapshot | null {
       privacy: {
         ...defaults.profile.privacy,
         ...legacy.profile.privacy,
-        // Existing users never silently opt into recognition that may leave-device.
-        speechRecognitionOptIn: false
+        // Existing users never silently opt into sending recordings to the
+        // advanced provider. Browser recognition consent, if explicitly given
+        // in v3, is preserved independently.
+        advancedPronunciationOptIn: false
       },
       onboardingCompleted,
       learningGoal
