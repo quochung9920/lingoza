@@ -133,26 +133,26 @@ function LearnerApp() {
   }
 
   return (
-    <AudioProvider>
-      <ContentProvider
-        fallback={
-          <AppShell header={<MiniAppSafeHeader title="Lingoza" />}>
-            <LoadingState />
-          </AppShell>
-        }
-        errorState={(retry) => (
-          <AppShell header={<MiniAppSafeHeader title="Lingoza" />}>
-            <ErrorState
-              title={ct("error.contentTitle")}
-              body={ct("error.contentBody")}
-              onRetry={retry}
-            />
-          </AppShell>
-        )}
-      >
+    <ContentProvider
+      fallback={
+        <AppShell header={<MiniAppSafeHeader title="Lingoza" />}>
+          <LoadingState />
+        </AppShell>
+      }
+      errorState={(retry) => (
+        <AppShell header={<MiniAppSafeHeader title="Lingoza" />}>
+          <ErrorState
+            title={ct("error.contentTitle")}
+            body={ct("error.contentBody")}
+            onRetry={retry}
+          />
+        </AppShell>
+      )}
+    >
+      <AudioProvider>
         <AppContent />
-      </ContentProvider>
-    </AudioProvider>
+      </AudioProvider>
+    </ContentProvider>
   );
 }
 
