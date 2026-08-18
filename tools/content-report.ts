@@ -22,6 +22,14 @@ const reviewedObjects = [
 
 const report = {
   language: bundle.profile.language,
+  programs: (bundle.programs ?? []).map((program) => ({
+    id: program.id,
+    alignmentReference: program.alignmentReference.reference,
+    bands: program.bands.length,
+    availableBands: program.bands.filter((band) => band.status === "available").length,
+    buildingBands: program.bands.filter((band) => band.status === "building").length,
+    plannedBands: program.bands.filter((band) => band.status === "planned").length
+  })),
   levels: bundle.levels.length,
   courses: bundle.courses.length,
   units: bundle.units.length,
