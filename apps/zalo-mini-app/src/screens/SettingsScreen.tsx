@@ -1,5 +1,7 @@
+import { useContent } from "../app/content-provider";
 import { useLearner } from "../app/learner-provider";
 import { Card, SecondaryButton, SectionHeading } from "../components/primitives";
+import { t } from "../lib/i18n";
 
 function ToggleRow({
   title,
@@ -42,14 +44,14 @@ const GOAL_LABEL = {
 } as const;
 
 export function SettingsScreen() {
+  const content = useContent();
   const { snapshot, updatePreferences, restartOnboarding } = useLearner();
   const preferences = snapshot.profile.preferences;
-  const showPinyin = preferences.visibleSupportLayers.includes("pinyin");
 
-  const setPinyin = (enabled: boolean) => {
+  const setSupportLayer = (key: string, enabled: boolean) => {
     const next = new Set(preferences.visibleSupportLayers);
-    if (enabled) next.add("pinyin");
-    else next.delete("pinyin");
+    if (enabled) next.add(key);
+    else next.delete(key);
     updatePreferences({ visibleSupportLayers: [...next] });
   };
 
@@ -60,7 +62,7 @@ export function SettingsScreen() {
         <div>
           <p className="lz-eyebrow lz-eyebrow--on-accent">TRẢI NGHIỆM HỌC</p>
           <h2>Tinh chỉnh cách Lingoza hỗ trợ bạn</h2>
-          <p>Giữ audio làm trung tâm, đồng thời giảm dần phiên âm và nghĩa khi bạn đã tự tin hơn.</p>
+          <p>Giữ audio làm trung tâm, đồng thời giảm dần lớp hỗ trợ đọc và nghĩa khi bạn đã tự tin hơn.</p>
         </div>
       </section>
 
@@ -85,12 +87,15 @@ export function SettingsScreen() {
       <Card>
         <SectionHeading title="Hiển thị khi học" />
         <div className="lz-settings-group">
-          <ToggleRow
-            title="Hiện Pinyin"
-            body="Phiên âm hỗ trợ người mới. Có thể tắt để luyện nghe và nhận diện chữ tự nhiên hơn."
-            checked={showPinyin}
-            onChange={setPinyin}
-          />
+          {content.bundle.profile.supportLayers.map((layer) => (
+            <ToggleRow
+              key={layer.key}
+              title={t(layer.label)}
+              body="Bật khi cần hỗ trợ đọc; tắt dần để ưu tiên nghe và nhận diện ngôn ngữ tự nhiên."
+              checked={preferences.visibleSupportLayers.includes(layer.key)}
+              onChange={(enabled) => setSupportLayer(layer.key, enabled)}
+            />
+          ))}
           <ToggleRow
             title="Hiện nghĩa tiếng Việt"
             body="Ẩn nghĩa khi bạn muốn buộc bản thân hiểu trực tiếp từ âm thanh và ngữ cảnh."
