@@ -40,7 +40,7 @@
   gap: var(--lz-space-5);
   padding: var(--lz-space-5);
   border: 1px solid var(--lz-border);
-  border-radius: var(--lz-radius-xl);
+  border-radius: var(--lz-radius-sheet);
   background: var(--lz-bg-raised);
   box-shadow: var(--lz-shadow-sm);
 }
@@ -58,7 +58,7 @@
 
 .lz-hsk-roadmap__head p {
   margin: 0;
-  color: var(--lz-text-secondary);
+  color: var(--lz-text-muted);
   line-height: 1.6;
 }
 
@@ -87,8 +87,8 @@
   gap: var(--lz-space-3);
   padding: var(--lz-space-3);
   border-radius: 16px;
-  background: var(--lz-bg-muted);
-  color: var(--lz-text-secondary);
+  background: var(--lz-bg-sunken);
+  color: var(--lz-text-muted);
 }
 
 .lz-hsk-roadmap__notice p {
@@ -117,7 +117,7 @@
 }
 
 .lz-hsk-stage__label small {
-  color: var(--lz-text-tertiary);
+  color: var(--lz-text-subtle);
 }
 
 .lz-hsk-stage__grid {
@@ -137,12 +137,12 @@
 }
 
 .lz-hsk-band[data-status="building"] {
-  border-color: color-mix(in srgb, var(--lz-accent) 34%, var(--lz-border));
+  border-color: var(--lz-violet-300);
   background: linear-gradient(145deg, var(--lz-bg-raised), var(--lz-accent-soft));
 }
 
 .lz-hsk-band[data-status="planned"] {
-  background: var(--lz-bg-muted);
+  background: var(--lz-bg-sunken);
 }
 
 .lz-hsk-band__top {
@@ -162,11 +162,11 @@
   color: white;
   font-size: var(--lz-text-lg);
   font-weight: 900;
-  box-shadow: var(--lz-shadow-xs);
+  box-shadow: var(--lz-shadow-sm);
 }
 
 .lz-hsk-band[data-status="planned"] .lz-hsk-band__number {
-  background: var(--lz-text-tertiary);
+  background: var(--lz-ink-400);
 }
 
 .lz-hsk-band__heading {
@@ -176,7 +176,7 @@
 }
 
 .lz-hsk-band__heading strong {
-  font-size: var(--lz-text-md);
+  font-size: var(--lz-text-base);
 }
 
 .lz-hsk-band__status {
@@ -188,8 +188,8 @@
 }
 
 .lz-hsk-band__status--available {
-  background: var(--lz-success-soft);
-  color: var(--lz-success-strong);
+  background: var(--lz-success-100);
+  color: var(--lz-success-600);
 }
 
 .lz-hsk-band__status--building {
@@ -199,12 +199,12 @@
 
 .lz-hsk-band__status--planned {
   background: var(--lz-bg-raised);
-  color: var(--lz-text-tertiary);
+  color: var(--lz-text-subtle);
 }
 
 .lz-hsk-band > p {
   margin: 0;
-  color: var(--lz-text-secondary);
+  color: var(--lz-text-muted);
   font-size: var(--lz-text-sm);
   line-height: 1.55;
 }
@@ -219,8 +219,8 @@
 .lz-hsk-band__planned {
   padding: 5px 8px;
   border-radius: 10px;
-  background: var(--lz-bg-muted);
-  color: var(--lz-text-tertiary);
+  background: var(--lz-bg-sunken);
+  color: var(--lz-text-subtle);
   font-size: var(--lz-text-xs);
 }
 
