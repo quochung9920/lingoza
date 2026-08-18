@@ -9,6 +9,11 @@ import { hybridSpeechEvaluator } from "../../../../packages/pronunciation-engine
 import { useAudio } from "../app/audio-provider";
 import { useLearner } from "../app/learner-provider";
 import {
+  assessPronunciationWithGateway,
+  isAdvancedPronunciationConfigured,
+  type PronunciationGatewayResult
+} from "../audio/pronunciation-assessment";
+import {
   createSpeechRecorder,
   disposeRecording,
   isRecordingSupported,
@@ -24,21 +29,17 @@ import { AudioButton } from "./audio";
 import { FeedbackPanel, PrimaryButton, SecondaryButton } from "./primitives";
 
 /**
- * The speaking surface: microphone, waveforms, sentence verification and
- * evidence-aware pronunciation feedback.
+ * Speaking surface: record, verify target content, collect optional phoneme
+ * evidence, then combine it with deterministic local prosody feedback.
  *
- * Prosody is always evaluated locally when recording is supported. Transcript
- * verification is optional and consent-gated because a browser/WebView speech
- * recognizer may process audio outside the device. Phoneme accuracy is never
- * invented: until a specialised provider supplies phoneme evidence, the UI
- * explicitly says the result is prosody-only.
+ * Evidence boundaries are explicit:
+ * - local signal analysis never claims phoneme accuracy;
+ * - browser recognition verifies text only;
+ * - the opt-in speech gateway may provide phoneme evidence;
+ * - missing providers degrade to the strongest evidence still available.
  */
 
 export type RecorderPhase = "idle" | "recording" | "processing" | "reviewed" | "denied" | "unsupported";
-
-/* ------------------------------------------------------------------ */
-/* Waveform                                                            */
-/* ------------------------------------------------------------------ */
 
 export function Waveform({ envelope, variant }: { envelope: number[]; variant?: "learner" }) {
   const bars = envelope.length > 0 ? envelope : new Array<number>(24).fill(0.12);
@@ -54,10 +55,6 @@ export function Waveform({ envelope, variant }: { envelope: number[]; variant?: 
     </div>
   );
 }
-
-/* ------------------------------------------------------------------ */
-/* Microphone                                                          */
-/* ------------------------------------------------------------------ */
 
 export function MicrophoneButton({
   phase,
@@ -94,10 +91,6 @@ export function MicrophoneButton({
     </button>
   );
 }
-
-/* ------------------------------------------------------------------ */
-/* Metrics                                                             */
-/* ------------------------------------------------------------------ */
 
 const METRIC_LABEL: Record<SpeechMetricId, Parameters<typeof ct>[0]> = {
   contentMatch: "metric.contentMatch",
@@ -147,12 +140,16 @@ export function SpeechMetrics({ evaluation }: { evaluation: SpeechEvaluation }) 
 
 function VerificationFeedback({
   evaluation,
-  recognitionRequested,
-  recognitionSupported
+  advancedRequested,
+  advancedConfigured,
+  browserRecognitionRequested,
+  browserRecognitionSupported
 }: {
   evaluation: SpeechEvaluation;
-  recognitionRequested: boolean;
-  recognitionSupported: boolean;
+  advancedRequested: boolean;
+  advancedConfigured: boolean;
+  browserRecognitionRequested: boolean;
+  browserRecognitionSupported: boolean;
 }) {
   const verification = evaluation.verification;
 
@@ -181,15 +178,22 @@ function VerificationFeedback({
             {ct("speak.recognizedAs")}: <strong lang="zh-CN">{verification.recognizedText}</strong>
           </p>
         ) : null}
-        <p className="lz-muted">{ct("speak.prosodyOnly")}</p>
+        <p className="lz-muted">
+          {verification.pronunciation === "phoneme-verified"
+            ? ct("speak.phonemeVerified")
+            : ct("speak.prosodyOnly")}
+        </p>
       </FeedbackPanel>
     );
   }
 
+  const noAdvancedGateway = advancedRequested && !advancedConfigured;
+  const noBrowserRecognition = browserRecognitionRequested && !browserRecognitionSupported;
+
   return (
     <FeedbackPanel tone="neutral" title={ct("speak.contentUnverified")}>
       <p className="lz-muted">
-        {recognitionRequested && !recognitionSupported
+        {noAdvancedGateway || noBrowserRecognition
           ? ct("speak.recognitionUnavailable")
           : ct("speak.prosodyOnly")}
       </p>
@@ -197,9 +201,35 @@ function VerificationFeedback({
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Recorder panel                                                      */
-/* ------------------------------------------------------------------ */
+function WordPronunciationDetails({ result }: { result: PronunciationGatewayResult | null }) {
+  const words = result?.words?.filter((word) => word.accuracy !== undefined) ?? [];
+  if (words.length === 0) return null;
+
+  return (
+    <div className="lz-stack lz-stack--tight">
+      <p className="lz-eyebrow">CHI TIẾT TỪNG TỪ</p>
+      {words.map((word, index) => {
+        const accuracy = word.accuracy ?? 0;
+        return (
+          <div className="lz-metric" key={`${word.text}-${index}`}>
+            <strong lang="zh-CN">{word.text}</strong>
+            <div
+              className="lz-progress"
+              role="progressbar"
+              aria-label={`${word.text}: ${Math.round(accuracy * 100)}%`}
+              aria-valuenow={Math.round(accuracy * 100)}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
+              <span className="lz-progress__fill" style={{ width: `${Math.round(accuracy * 100)}%` }} />
+            </div>
+            <span className="lz-metric__value">{Math.round(accuracy * 100)}%</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 export interface RecorderPanelProps {
   targetId: ContentId;
@@ -210,7 +240,7 @@ export interface RecorderPanelProps {
   continueLabel?: string;
 }
 
-/** Record → optionally verify text → compare prosody → continue. */
+/** Record → optional provider assessment → local prosody → continue. */
 export function RecorderPanel({
   targetId,
   targetText,
@@ -232,11 +262,15 @@ export function RecorderPanel({
   );
   const [recording, setRecording] = useState<Recording | null>(null);
   const [evaluation, setEvaluation] = useState<SpeechEvaluation | null>(null);
+  const [gatewayResult, setGatewayResult] = useState<PronunciationGatewayResult | null>(null);
   const playbackRef = useRef<HTMLAudioElement | null>(null);
 
   const keepRecordings = snapshot.profile.privacy.keepRecordingsLocally;
-  const recognitionRequested = snapshot.profile.privacy.speechRecognitionOptIn;
-  const recognitionSupported = isBrowserSpeechRecognitionSupported();
+  const advancedRequested = snapshot.profile.privacy.advancedPronunciationOptIn;
+  const advancedConfigured = isAdvancedPronunciationConfigured();
+  const browserRecognitionRequested =
+    snapshot.profile.privacy.speechRecognitionOptIn && !(advancedRequested && advancedConfigured);
+  const browserRecognitionSupported = isBrowserSpeechRecognitionSupported();
 
   const discard = useCallback(
     (current: Recording | null) => {
@@ -273,11 +307,12 @@ export function RecorderPanel({
     discard(recording);
     setRecording(null);
     setEvaluation(null);
+    setGatewayResult(null);
     verifier.cancel();
 
     try {
       await recorder.start();
-      if (recognitionRequested && verifier.supported) verifier.start();
+      if (browserRecognitionRequested && verifier.supported) verifier.start();
       if (!snapshot.profile.privacy.microphoneConsentGrantedAt) grantMicrophoneConsent();
       setPhase("recording");
     } catch {
@@ -290,7 +325,7 @@ export function RecorderPanel({
     verifier,
     recording,
     discard,
-    recognitionRequested,
+    browserRecognitionRequested,
     snapshot.profile.privacy.microphoneConsentGrantedAt,
     grantMicrophoneConsent
   ]);
@@ -298,18 +333,29 @@ export function RecorderPanel({
   const handleStop = useCallback(async () => {
     setPhase("processing");
     try {
-      const [result, recognition] = await Promise.all([
-        recorder.stop(),
-        recognitionRequested && verifier.supported
-          ? verifier.stop(targetText)
-          : Promise.resolve(null)
-      ]);
+      const result = await recorder.stop();
       if (!result) {
         verifier.cancel();
         setPhase("idle");
         return;
       }
+
+      const [advanced, browserRecognition] = await Promise.all([
+        advancedRequested && advancedConfigured
+          ? assessPronunciationWithGateway({
+              audio: result.assessmentAudio,
+              targetText,
+              language: snapshot.profile.activeLanguage,
+              targetId
+            }).catch(() => null)
+          : Promise.resolve(null),
+        browserRecognitionRequested && verifier.supported
+          ? verifier.stop(targetText)
+          : Promise.resolve(null)
+      ]);
+
       setRecording(result);
+      setGatewayResult(advanced);
       setEvaluation(
         hybridSpeechEvaluator.evaluate({
           reference: referenceFeaturesFromMetadata(
@@ -318,7 +364,8 @@ export function RecorderPanel({
           ),
           learner: result.features,
           tonal,
-          recognition: recognition ?? undefined
+          recognition: advanced?.recognition ?? browserRecognition ?? undefined,
+          phonemes: advanced?.phonemes
         })
       );
       setPhase("reviewed");
@@ -326,7 +373,18 @@ export function RecorderPanel({
       verifier.cancel();
       setPhase("idle");
     }
-  }, [recorder, verifier, recognitionRequested, targetText, targetAsset, tonal]);
+  }, [
+    recorder,
+    verifier,
+    advancedRequested,
+    advancedConfigured,
+    browserRecognitionRequested,
+    targetText,
+    targetId,
+    targetAsset,
+    tonal,
+    snapshot.profile.activeLanguage
+  ]);
 
   const playBack = useCallback(() => {
     if (!recording) return;
@@ -364,7 +422,12 @@ export function RecorderPanel({
               {ct("speak.permissionBody")}
             </p>
           ) : null}
-          {phase === "idle" && recognitionRequested && !recognitionSupported ? (
+          {phase === "idle" && advancedRequested && !advancedConfigured ? (
+            <p className="lz-muted" style={{ textAlign: "center", maxWidth: 320 }}>
+              {ct("speak.advancedUnavailable")}
+            </p>
+          ) : null}
+          {phase === "idle" && browserRecognitionRequested && !browserRecognitionSupported ? (
             <p className="lz-muted" style={{ textAlign: "center", maxWidth: 320 }}>
               {ct("speak.recognitionUnavailable")}
             </p>
@@ -397,10 +460,13 @@ export function RecorderPanel({
 
           <VerificationFeedback
             evaluation={evaluation}
-            recognitionRequested={recognitionRequested}
-            recognitionSupported={recognitionSupported}
+            advancedRequested={advancedRequested}
+            advancedConfigured={advancedConfigured}
+            browserRecognitionRequested={browserRecognitionRequested}
+            browserRecognitionSupported={browserRecognitionSupported}
           />
           <SpeechMetrics evaluation={evaluation} />
+          <WordPronunciationDetails result={gatewayResult} />
 
           <div className="lz-stack lz-stack--tight">
             <PrimaryButton onClick={() => onComplete(evaluation.overall)}>
