@@ -12,6 +12,7 @@ import {
   HSK_PRODUCTION_PLAN,
   productionPlanForBand
 } from "../../../../language-packs/zh-CN/src/hsk-production-plan";
+import { hskThemeLabelVi } from "../../../../language-packs/zh-CN/src/hsk-theme-labels";
 import { useContent } from "../app/content-provider";
 import { useLearner } from "../app/learner-provider";
 import { Card, InteractiveCard, ProgressBar, SectionHeading } from "../components/primitives";
@@ -168,7 +169,7 @@ function ProgramBandCard({ band }: { band: ProgramBand }) {
         <div className="lz-hsk-band__heading">
           <strong>{t(band.label)}</strong>
           <span className="lz-hsk-band__status lz-hsk-band__status--available">
-            Đã phát triển lộ trình
+            {band.developmentStatus === "developed" ? "Đã phát triển lộ trình" : "Đang phát triển lộ trình"}
           </span>
         </div>
       </div>
@@ -180,6 +181,21 @@ function ProgramBandCard({ band }: { band: ProgramBand }) {
         <span>{target?.minimumUnits ?? 0} unit mục tiêu</span>
         <span>{target?.minimumLessons ?? 0} bài mục tiêu</span>
       </div>
+
+      {productionPlan ? (
+        <details style={{ marginTop: 12 }}>
+          <summary style={{ cursor: "pointer", fontWeight: 700 }}>
+            Xem đầy đủ {productionPlan.themes.length} danh mục HSK {band.ordinal}
+          </summary>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+            {productionPlan.themes.map((theme, index) => (
+              <span className="lz-pill" key={`${band.id}.theme.${theme}`}>
+                {index + 1}. {hskThemeLabelVi(theme)}
+              </span>
+            ))}
+          </div>
+        </details>
+      ) : null}
 
       <div className="lz-hsk-band__planned" style={{ marginTop: 10 }}>
         <strong>Trạng thái phát hành:</strong>{" "}
