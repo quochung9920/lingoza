@@ -24,17 +24,17 @@ interface AudioValue {
   state: PlaybackState;
   playing: NowPlaying | null;
   isPlaying(ownerId: ContentId, speed?: AudioSpeed, segmentId?: string): boolean;
-  canPlay(asset: AudioAsset | undefined): boolean;
+  canPlay(asset: AudioAsset | undefined, fallbackText?: string): boolean;
 }
 
 const AudioContext = createContext<AudioValue | null>(null);
 
 /**
- * Where recordings are served from.
+ * Where reviewed recordings are served from.
  *
  * Read from the build environment so staging and production point at different
  * buckets, with a relative default that resolves inside the Mini App package
- * during development. No audio is bundled at any point.
+ * during development.
  */
 const AUDIO_BASE_URL = (import.meta.env?.VITE_LINGOZA_AUDIO_BASE as string | undefined) ?? "./audio";
 
@@ -48,8 +48,7 @@ export function AudioProvider({ children }: { children: ReactNode }) {
       setState(nextState);
       setPlaying(nextPlaying);
     });
-    // Leaving audio running after the player unmounts is the classic way to
-    // end up with two clips overlapping across a navigation.
+
     return () => {
       unsubscribe();
       manager.stop();
@@ -66,7 +65,7 @@ export function AudioProvider({ children }: { children: ReactNode }) {
         playing?.ownerId === ownerId &&
         (speed === undefined || playing.speed === speed) &&
         (segmentId === undefined || playing.segmentId === segmentId),
-      canPlay: (asset) => manager.canPlay(asset)
+      canPlay: (asset, fallbackText) => manager.canPlay(asset, fallbackText)
     }),
     [manager, state, playing]
   );
