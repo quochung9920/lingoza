@@ -90,15 +90,19 @@ export function SettingsScreen() {
           {content.bundle.profile.supportLayers.map((layer) => (
             <ToggleRow
               key={layer.key}
-              title={t(layer.label)}
-              body="Bật khi cần hỗ trợ đọc; tắt dần để ưu tiên nghe và nhận diện ngôn ngữ tự nhiên."
+              title={layer.key === "pinyin" ? "Pinyin trong câu" : t(layer.label)}
+              body={
+                layer.key === "pinyin"
+                  ? "Pinyin dưới từng từ vựng luôn được giữ để bạn đọc đúng. Công tắc này chỉ điều khiển lớp Pinyin hỗ trợ ở câu và ví dụ dài."
+                  : "Bật khi cần hỗ trợ đọc; tắt dần để ưu tiên nghe và nhận diện ngôn ngữ tự nhiên."
+              }
               checked={preferences.visibleSupportLayers.includes(layer.key)}
               onChange={(enabled) => setSupportLayer(layer.key, enabled)}
             />
           ))}
           <ToggleRow
-            title="Hiện nghĩa tiếng Việt"
-            body="Ẩn nghĩa khi bạn muốn buộc bản thân hiểu trực tiếp từ âm thanh và ngữ cảnh."
+            title="Hiện nghĩa tiếng Việt trong câu"
+            body="Từ vựng không hiện nghĩa thường trực: chạm trực tiếp vào từ để mở nghĩa chi tiết, cách dùng, cụm từ và ví dụ. Công tắc này chỉ áp dụng cho câu."
             checked={preferences.showTranslation}
             onChange={(showTranslation) => updatePreferences({ showTranslation })}
           />
