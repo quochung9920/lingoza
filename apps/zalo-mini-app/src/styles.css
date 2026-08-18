@@ -4,6 +4,7 @@
 @import "./theme/tokens.css";
 @import "./theme/base.css";
 @import "./theme/experience.css";
+@import "./theme/catalog.css";
 @import "./theme/lexical.css";
 @import "./theme/settings.css";
 @import "./theme/support.css";
