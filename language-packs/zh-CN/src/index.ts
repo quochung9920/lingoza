@@ -24,7 +24,8 @@ import {
   expansionSentences,
   expansionUnits
 } from "./expansion-bundle.js";
-import { lexicalItems as coreLexicalItems, sentences as coreSentences } from "./lexicon.js";
+import { enrichCoreLexicalItem } from "./lexical-details.js";
+import { lexicalItems as authoredCoreLexicalItems, sentences as coreSentences } from "./lexicon.js";
 import { patterns } from "./patterns.js";
 import { topics } from "./topics.js";
 
@@ -56,6 +57,8 @@ export const profile: LanguageProfile = {
   ],
   audioBasePath: "zh-CN"
 };
+
+const coreLexicalItems = authoredCoreLexicalItems.map(enrichCoreLexicalItem);
 
 export const lexicalItems = [...coreLexicalItems, ...expansionLexicalItems];
 export const sentences = [...coreSentences, ...expansionSentences];
