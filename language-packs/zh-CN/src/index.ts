@@ -24,6 +24,7 @@ import {
   expansionSentences,
   expansionUnits
 } from "./expansion-bundle.js";
+import { hskProgram } from "./hsk.js";
 import { enrichCoreLexicalItem } from "./lexical-details.js";
 import { lexicalItems as authoredCoreLexicalItems, sentences as coreSentences } from "./lexicon.js";
 import { patterns } from "./patterns.js";
@@ -34,8 +35,8 @@ import { topics } from "./topics.js";
  *
  * The compact original vertical slice remains intact for migration tests while
  * production-oriented expansion content is merged here. Existing concept ids
- * are deliberately reused by specialist courses, so learning a word in the
- * foundation path also counts when it appears in Travel/Pronunciation/etc.
+ * are deliberately reused by specialist courses, so specialist practice
+ * strengthens the same mastery record instead of duplicating vocabulary.
  */
 
 export const profile: LanguageProfile = {
@@ -76,6 +77,7 @@ export const courses = [
 
 export const chineseBundle: ContentBundle = {
   profile,
+  programs: [hskProgram],
   levels,
   topics,
   concepts,
@@ -91,6 +93,7 @@ export const chineseBundle: ContentBundle = {
 
 export {
   assessments,
+  hskProgram,
   levels,
   patterns,
   scenarios,
