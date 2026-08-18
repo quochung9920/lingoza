@@ -9,15 +9,7 @@ import {
 
 import type { AudioAsset, AudioSpeed, ContentId } from "../../../../packages/content-schema/src/index";
 import { AudioManager, type NowPlaying, type PlaybackState } from "../audio/audio-manager";
-
-/**
- * Exposes the single `AudioManager` to the tree, plus the playback state each
- * speaker button needs to render itself.
- *
- * State is broadcast from one subscription rather than one per button: a
- * vocabulary screen can easily hold twenty speakers, and twenty subscriptions
- * to the same source is waste.
- */
+import { useContent } from "./content-provider";
 
 interface AudioValue {
   manager: AudioManager;
@@ -30,16 +22,19 @@ interface AudioValue {
 const AudioContext = createContext<AudioValue | null>(null);
 
 /**
- * Where reviewed recordings are served from.
- *
- * Read from the build environment so staging and production point at different
- * buckets, with a relative default that resolves inside the Mini App package
- * during development.
+ * Reviewed recordings are served outside the Mini App bundle. The language
+ * pack contributes its own `audioBasePath`, so the same player can resolve
+ * zh-CN/items/... today and ja-JP/items/... later.
  */
 const AUDIO_BASE_URL = (import.meta.env?.VITE_LINGOZA_AUDIO_BASE as string | undefined) ?? "./audio";
 
 export function AudioProvider({ children }: { children: ReactNode }) {
-  const manager = useMemo(() => new AudioManager({ baseUrl: AUDIO_BASE_URL }), []);
+  const { bundle } = useContent();
+  const basePath = bundle.profile.audioBasePath;
+  const manager = useMemo(
+    () => new AudioManager({ baseUrl: AUDIO_BASE_URL, basePath }),
+    [basePath]
+  );
   const [state, setState] = useState<PlaybackState>("idle");
   const [playing, setPlaying] = useState<NowPlaying | null>(null);
 
