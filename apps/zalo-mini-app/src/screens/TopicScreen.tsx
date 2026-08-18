@@ -1,9 +1,11 @@
 import { useMemo } from "react";
 
 import type { ContentId } from "../../../../packages/content-schema/src/index";
+import { availableConcepts, learningPathTo } from "../../../../packages/curriculum-engine/src/index";
 import { useContent } from "../app/content-provider";
+import { useLearner } from "../app/learner-provider";
 import { Card, EmptyState, InteractiveCard, SectionHeading } from "../components/primitives";
-import { t } from "../lib/i18n";
+import { ct, t } from "../lib/i18n";
 
 export function TopicScreen({
   topicId,
@@ -17,11 +19,17 @@ export function TopicScreen({
   onOpenScenario: (scenarioId: ContentId) => void;
 }) {
   const content = useContent();
+  const { masteryLookup } = useLearner();
   const topic = content.topic(topicId);
 
   const units = useMemo(() => content.unitsForTopic(topicId), [content, topicId]);
   const lessons = useMemo(() => content.lessonsForTopic(topicId), [content, topicId]);
   const scenarios = useMemo(() => content.scenariosForTopic(topicId), [content, topicId]);
+
+  const unlockedConceptIds = useMemo(
+    () => new Set(availableConcepts(content.bundle.concepts, masteryLookup).map((concept) => concept.id)),
+    [content.bundle.concepts, masteryLookup]
+  );
 
   const vocabularyCount = useMemo(() => {
     const vocabulary = new Set<ContentId>();
@@ -73,24 +81,43 @@ export function TopicScreen({
       {lessons.length > 0 ? (
         <div className="lz-stack lz-stack--tight">
           <SectionHeading title="Bài học" />
-          {lessons.map((lesson) => (
-            <InteractiveCard key={lesson.id} onClick={() => onOpenLesson(lesson.id)} ariaLabel={t(lesson.title)}>
-              <div className="lz-topic-section-card">
-                <div className="lz-row lz-row--between">
-                  <strong>{t(lesson.title)}</strong>
-                  <span className="lz-pill">{lesson.estimatedMinutes} phút</span>
-                </div>
-                <p className="lz-muted">🎯 {t(lesson.canDo)}</p>
-                <div className="lz-topic-section-card__meta">
-                  <span className="lz-pill">🎧 Nghe</span>
-                  <span className="lz-pill">🎤 Nói</span>
-                  {lesson.activities.some((activity) => activity.kind === "ROLE_PLAY" || activity.kind === "DIALOGUE") ? (
-                    <span className="lz-pill">💬 Hội thoại</span>
+          {lessons.map((lesson) => {
+            const missing = lesson.conceptIds.flatMap((conceptId) =>
+              learningPathTo(content.graph, conceptId, masteryLookup).filter(
+                (concept) => !lesson.conceptIds.includes(concept.id)
+              )
+            );
+            const locked = missing.length > 0;
+
+            return (
+              <InteractiveCard
+                key={lesson.id}
+                onClick={() => onOpenLesson(lesson.id)}
+                disabled={locked}
+                ariaLabel={`${t(lesson.title)}${locked ? ` — ${ct("common.locked")}` : ""}`}
+              >
+                <div className="lz-topic-section-card">
+                  <div className="lz-row lz-row--between">
+                    <strong>{t(lesson.title)}</strong>
+                    <span className={locked ? "lz-pill lz-pill--locked" : "lz-pill"}>
+                      {locked ? `🔒 ${ct("common.locked")}` : `${lesson.estimatedMinutes} phút`}
+                    </span>
+                  </div>
+                  <p className="lz-muted">🎯 {t(lesson.canDo)}</p>
+                  <div className="lz-topic-section-card__meta">
+                    <span className="lz-pill">🎧 Nghe</span>
+                    <span className="lz-pill">🎤 Nói</span>
+                    {lesson.activities.some((activity) => activity.kind === "ROLE_PLAY" || activity.kind === "DIALOGUE") ? (
+                      <span className="lz-pill">💬 Hội thoại</span>
+                    ) : null}
+                  </div>
+                  {locked && missing.length > 0 ? (
+                    <p className="lz-muted">Cần học trước: {missing.map((concept) => t(concept.title)).join(", ")}</p>
                   ) : null}
                 </div>
-              </div>
-            </InteractiveCard>
-          ))}
+              </InteractiveCard>
+            );
+          })}
         </div>
       ) : (
         <Card variant="muted"><p className="lz-muted">Chủ đề này chưa có bài học được phát hành.</p></Card>
@@ -99,17 +126,27 @@ export function TopicScreen({
       {scenarios.length > 0 ? (
         <div className="lz-stack lz-stack--tight">
           <SectionHeading title="Hội thoại thực hành" />
-          {scenarios.map((scenario) => (
-            <InteractiveCard key={scenario.id} onClick={() => onOpenScenario(scenario.id)} ariaLabel={t(scenario.title)}>
-              <div className="lz-row lz-row--between">
-                <div>
-                  <strong>💬 {t(scenario.title)}</strong>
-                  <p className="lz-muted">{t(scenario.setting)}</p>
+          {scenarios.map((scenario) => {
+            const locked = !scenario.conceptIds.some((id) => unlockedConceptIds.has(id));
+            return (
+              <InteractiveCard
+                key={scenario.id}
+                onClick={() => onOpenScenario(scenario.id)}
+                disabled={locked}
+                ariaLabel={`${t(scenario.title)}${locked ? ` — ${ct("common.locked")}` : ""}`}
+              >
+                <div className="lz-row lz-row--between">
+                  <div>
+                    <strong>💬 {t(scenario.title)}</strong>
+                    <p className="lz-muted">{t(scenario.setting)}</p>
+                  </div>
+                  <span className={locked ? "lz-pill lz-pill--locked" : "lz-pill"}>
+                    {locked ? `🔒 ${ct("common.locked")}` : scenario.level}
+                  </span>
                 </div>
-                <span className="lz-pill">{scenario.level}</span>
-              </div>
-            </InteractiveCard>
-          ))}
+              </InteractiveCard>
+            );
+          })}
         </div>
       ) : null}
     </div>
