@@ -7,7 +7,7 @@ import { DEFAULT_LANGUAGE, supportedLanguages } from "../app/language-registry";
 import { PrimaryButton, SecondaryButton } from "../components/primitives";
 import { t } from "../lib/i18n";
 
-const GOALS: readonly Array<{
+const GOALS: ReadonlyArray<{
   id: LearningGoal;
   icon: string;
   title: string;
@@ -20,7 +20,7 @@ const GOALS: readonly Array<{
   { id: "hsk", icon: "🏅", title: "HSK", description: "Ưu tiên nội dung hỗ trợ lộ trình thi HSK." }
 ];
 
-const LEVELS: readonly Array<{
+const LEVELS: ReadonlyArray<{
   id: LingozaLevel;
   title: string;
   description: string;
