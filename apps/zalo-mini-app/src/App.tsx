@@ -7,13 +7,14 @@ import { LearnerProvider, useLearner } from "./app/learner-provider";
 import { ErrorState, LoadingState } from "./components/primitives";
 import { AppShell, BottomNav, MiniAppSafeHeader, type TabId } from "./components/shell";
 import { ct } from "./lib/i18n";
+import { CourseCatalogScreen } from "./screens/CourseCatalogScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { LessonPlayer } from "./screens/LessonPlayer";
 import { OnboardingScreen } from "./screens/OnboardingScreen";
 import { ConversationScreen, PracticeScreen, ProgressScreen } from "./screens/PracticeScreens";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { TopicScreen } from "./screens/TopicScreen";
-import { CourseMapScreen, UnitScreen } from "./screens/UnitScreen";
+import { UnitScreen } from "./screens/UnitScreen";
 
 type Route =
   | { name: "tab"; tab: TabId }
@@ -88,8 +89,8 @@ function AppContent() {
 
   if (route.name === "course") {
     return (
-      <AppShell header={<MiniAppSafeHeader title="Lộ trình" onBack={pop} bordered />} nav={nav}>
-        <CourseMapScreen onOpenUnit={(unitId) => push({ name: "unit", unitId })} />
+      <AppShell header={<MiniAppSafeHeader title="Khóa học" onBack={pop} bordered />} nav={nav}>
+        <CourseCatalogScreen onOpenUnit={(unitId) => push({ name: "unit", unitId })} />
       </AppShell>
     );
   }
