@@ -57,6 +57,48 @@ Evaluation Curriculum Dialogue  SRS
          Learner Progress
 ```
 
+## Development setup
+
+### Requirements
+
+- Git
+- Node.js 20 LTS or newer
+- npm (included with Node.js)
+
+No database, API key, OpenAI key, GPU, or local AI model is required for the current core.
+
+### Windows
+
+```powershell
+git clone https://github.com/quochung9920/lingoza.git
+cd lingoza
+npm install
+npm run check
+```
+
+### macOS / Linux
+
+```bash
+git clone https://github.com/quochung9920/lingoza.git
+cd lingoza
+npm install
+npm run check
+```
+
+### Useful commands
+
+```bash
+npm run build   # TypeScript compile check
+npm run test    # Run behavioral tests
+npm run check   # Build + tests
+```
+
+## What can be run today?
+
+The repository currently contains the model-free learning engine and the first Chinese reference language pack. It does not yet contain the Zalo Mini App learner UI or an HTTP application server, so there is intentionally no `npm run dev` browser application yet.
+
+At this stage, `npm run check` is the main executable validation command. The next application milestone is the Zalo Mini App client plus an application API that consumes this core.
+
 ## Next milestones
 
 1. Content validator and pack compiler.
@@ -68,12 +110,5 @@ Evaluation Curriculum Dialogue  SRS
 7. Zalo Mini App learner client.
 8. Admin authoring and content QA tools.
 9. Additional language packs using the same core contracts.
-
-## Development
-
-```bash
-npm install
-npm run check
-```
 
 The repository is intentionally model-free at runtime. AI may be used during content authoring and QA, but generated content should be compiled and validated before shipping to learners.
