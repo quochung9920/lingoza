@@ -3,10 +3,13 @@ import type { ContentId, LanguageTag, LocalizedText, SourceReference } from "./c
 /** A broad stage inside an external proficiency framework. */
 export type ProgramStage = "elementary" | "intermediate" | "advanced";
 
+/** Whether the curriculum structure itself has been designed. */
+export type ProgramBandDevelopmentStatus = "developed" | "in-development";
+
 /**
  * Commercial release readiness of a program band.
  *
- * This is deliberately NOT the same thing as "has a curriculum blueprint".
+ * This is deliberately NOT the same thing as `developmentStatus`.
  * A band may already have its full structure, themes, targets and learner
  * outcomes designed while still being `planned` or `building` for commercial
  * release because authored lessons, reviewed audio, reference coverage or
@@ -24,6 +27,8 @@ export interface ProgramBand {
   ordinal: number;
   label: LocalizedText;
   stage: ProgramStage;
+  /** Curriculum-design completeness. Independent from release readiness. */
+  developmentStatus: ProgramBandDevelopmentStatus;
   /** Release readiness, not curriculum-design completeness. */
   status: ProgramBandStatus;
   description: LocalizedText;
