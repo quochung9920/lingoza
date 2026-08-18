@@ -1,5 +1,5 @@
 import { useLearner } from "../app/learner-provider";
-import { Card, SectionHeading } from "../components/primitives";
+import { Card, SecondaryButton, SectionHeading } from "../components/primitives";
 
 function ToggleRow({
   title,
@@ -33,8 +33,16 @@ function ToggleRow({
   );
 }
 
+const GOAL_LABEL = {
+  conversation: "Giao tiếp",
+  travel: "Du lịch",
+  work: "Công việc",
+  study: "Học tập",
+  hsk: "HSK"
+} as const;
+
 export function SettingsScreen() {
-  const { snapshot, updatePreferences } = useLearner();
+  const { snapshot, updatePreferences, restartOnboarding } = useLearner();
   const preferences = snapshot.profile.preferences;
   const showPinyin = preferences.visibleSupportLayers.includes("pinyin");
 
@@ -55,6 +63,24 @@ export function SettingsScreen() {
           <p>Giữ audio làm trung tâm, đồng thời giảm dần phiên âm và nghĩa khi bạn đã tự tin hơn.</p>
         </div>
       </section>
+
+      <Card>
+        <SectionHeading title="Lộ trình cá nhân" />
+        <div className="lz-setting-summary">
+          <div>
+            <span>Mục tiêu</span>
+            <strong>{GOAL_LABEL[snapshot.profile.learningGoal]}</strong>
+          </div>
+          <div>
+            <span>Cấp khởi điểm</span>
+            <strong>{snapshot.profile.currentLevel}</strong>
+          </div>
+        </div>
+        <SecondaryButton onClick={restartOnboarding}>Thay đổi mục tiêu / thiết lập ban đầu</SecondaryButton>
+        <p className="lz-muted" style={{ margin: "8px 0 0" }}>
+          Thao tác này không xoá bài đã học, mastery hay lịch ôn tập.
+        </p>
+      </Card>
 
       <Card>
         <SectionHeading title="Hiển thị khi học" />
