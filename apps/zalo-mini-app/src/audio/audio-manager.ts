@@ -26,6 +26,8 @@ export interface AudioManagerOptions {
   baseUrl: string;
   /** Language-pack path beneath the root, e.g. zh-CN. */
   basePath?: string;
+  /** BCP-47 language used when a direct playback call omits `lang`. */
+  defaultLang?: string;
   /** Resolve authored text when a caller only knows an owner id. */
   fallbackTextResolver?: (ownerId: ContentId) => string | undefined;
 }
@@ -188,7 +190,7 @@ export class AudioManager {
     }
 
     const utterance = new SpeechSynthesisUtterance(text);
-    const lang = options.lang ?? "zh-CN";
+    const lang = options.lang ?? this.options.defaultLang ?? "zh-CN";
     utterance.lang = lang;
     utterance.rate = speed === "slow" ? 0.72 : 0.95;
     utterance.pitch = 1;
