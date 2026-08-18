@@ -14,6 +14,7 @@
     "zalo:init": "npm --prefix apps/zalo-mini-app run zalo:init",
     "zalo:login": "npm --prefix apps/zalo-mini-app run zalo:login",
     "zalo:deploy": "npm --prefix apps/zalo-mini-app run zalo:deploy",
+    "start:speech-api": "node dist/services/speech-api/src/server.js",
     "validate:content": "npm run build && node dist/tools/validate-content.js",
     "report:content": "npm run build && node dist/tools/content-report.js",
     "report:hsk": "npm run build && node dist/tools/hsk-report.js"
