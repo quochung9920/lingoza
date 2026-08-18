@@ -46,6 +46,23 @@ export interface ChineseLanguageData extends LanguageData {
 }
 
 /**
+ * One dictionary-style sense of a lexical item. `meaning` remains the compact
+ * gloss used by exercises; senses power the on-demand detail sheet so learners
+ * can inspect nuance without having Vietnamese permanently visible under every
+ * target-language word.
+ */
+export interface LexicalSense {
+  id: string;
+  gloss: LocalizedText;
+  /** Slightly fuller learner-facing explanation of this sense. */
+  definition?: LocalizedText;
+  /** Usage/register note that prevents a superficially-correct misuse. */
+  usageNote?: LocalizedText;
+  /** Examples that specifically demonstrate this sense. */
+  exampleSentenceIds: ContentId[];
+}
+
+/**
  * A lexical item: word, fixed phrase, or collocation. The `kind` distinction
  * lets one entry (咖啡) own its collocations (喝咖啡, 一杯咖啡) as first-class
  * entries with their own audio rather than as bare strings.
@@ -58,7 +75,12 @@ export interface LexicalItem {
   text: string;
   /** Phonetic transcription (pinyin, romaji, IPA...). Support layer only. */
   romanization?: string;
+  /** Compact gloss used in exercises and search results. */
   meaning: LocalizedText;
+  /** Optional detailed dictionary-style senses, revealed on demand. */
+  senses?: LexicalSense[];
+  /** Whole-item usage note when it applies across all senses. */
+  usageNote?: LocalizedText;
   partOfSpeech: PartOfSpeech;
   level: LingozaLevel;
   /** Target depth this item should reach at its level. */
