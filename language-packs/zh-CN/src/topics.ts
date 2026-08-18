@@ -1,15 +1,6 @@
 import type { Topic } from "../../../packages/content-schema/src/index.js";
 
-/**
- * Topic ontology for the Chinese pack.
- *
- * Only the branches the A0/A1 seed actually uses are populated with leaves,
- * but the root domains are declared in full. That is deliberate: a topic tree
- * that grows a new root every time content is added produces a home screen
- * whose shape changes under the learner, whereas adding leaves under a stable
- * set of domains does not.
- */
-
+/** Stable topic ontology for the Chinese pack. */
 let order = 0;
 const next = () => (order += 1);
 
@@ -60,8 +51,25 @@ export const topics: Topic[] = [
   topic("food.restaurant.preferences", "food.restaurant", "Sở thích & dị ứng", "Preferences & allergies", "⚠️"),
   topic("food.restaurant.bill", "food.restaurant", "Thanh toán", "Paying the bill", "🧾"),
 
-  /* Travel & shopping ---------------------------------------------- */
+  /* Travel --------------------------------------------------------- */
   topic("travel.directions", "travel", "Hỏi đường", "Directions", "🧭"),
   topic("travel.transport", "travel", "Phương tiện", "Transport", "🚌"),
-  topic("shopping.prices", "shopping", "Giá cả", "Prices", "🏷️")
+  topic("travel.airport", "travel", "Sân bay", "Airport", "🛫"),
+  topic("travel.hotel", "travel", "Khách sạn", "Hotel", "🏨"),
+
+  /* Shopping ------------------------------------------------------- */
+  topic("shopping.prices", "shopping", "Giá cả", "Prices", "🏷️"),
+  topic("shopping.buying", "shopping", "Chọn & mua hàng", "Choosing & buying", "🛒"),
+
+  /* Health --------------------------------------------------------- */
+  topic("health.basic", "health", "Sức khoẻ cơ bản", "Basic health", "❤️‍🩹"),
+  topic("health.pharmacy", "health", "Nhà thuốc", "Pharmacy", "💊"),
+
+  /* Work ----------------------------------------------------------- */
+  topic("work.office", "work", "Văn phòng", "Office", "🏢"),
+  topic("work.meetings", "work", "Cuộc họp", "Meetings", "📊"),
+
+  /* Services ------------------------------------------------------- */
+  topic("services.toilet", "services", "Nhà vệ sinh", "Restroom", "🚻"),
+  topic("services.help", "services", "Nhờ giúp đỡ", "Asking for help", "🆘")
 ];
