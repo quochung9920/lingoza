@@ -9,7 +9,11 @@ import {
   type ReactNode
 } from "react";
 
-import type { ContentId, LearningSkill } from "../../../../packages/content-schema/src/index";
+import type {
+  ContentId,
+  LearningSkill,
+  LingozaLevel
+} from "../../../../packages/content-schema/src/index";
 import {
   toMasteryLookup,
   type MasteryLookup,
@@ -39,18 +43,23 @@ import {
   type LearnerPreferences,
   type LearnerRepository,
   type LearnerSnapshot,
+  type LearningGoal,
   type PrivacySettings
 } from "../../../../packages/persistence/src/index";
 import { DEFAULT_LOCALE } from "../lib/i18n";
 
 /**
- * Learner state: mastery, review schedule, preferences, privacy, streak.
- *
- * All the reasoning lives in the engine packages. This provider does three
- * things and nothing else: hold the snapshot, hand outcomes to the engines,
- * and persist the result. That boundary is what keeps the learning model
- * testable without React and keeps components free of learning logic.
+ * Learner state: mastery, review schedule, preferences, privacy, streak and
+ * onboarding choices. Learning decisions remain in the engine packages; this
+ * provider only coordinates state and persistence.
  */
+
+export interface OnboardingSelection {
+  language: string;
+  goal: LearningGoal;
+  level: LingozaLevel;
+  dailyGoalMinutes: number;
+}
 
 export interface LearnerValue {
   snapshot: LearnerSnapshot;
@@ -66,6 +75,7 @@ export interface LearnerValue {
   updatePreferences(patch: Partial<LearnerPreferences>): void;
   updatePrivacy(patch: Partial<PrivacySettings>): void;
   grantMicrophoneConsent(): void;
+  completeOnboarding(selection: OnboardingSelection): void;
   skillScore(conceptId: ContentId, skill: LearningSkill): number;
   resetProgress(): void;
 }
@@ -206,6 +216,23 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
     updatePrivacy({ microphoneConsentGrantedAt: new Date().toISOString() });
   }, [updatePrivacy]);
 
+  const completeOnboarding = useCallback((selection: OnboardingSelection) => {
+    setSnapshot((previous) => ({
+      ...previous,
+      profile: {
+        ...previous.profile,
+        activeLanguage: selection.language,
+        currentLevel: selection.level,
+        learningGoal: selection.goal,
+        onboardingCompleted: true,
+        preferences: {
+          ...previous.profile.preferences,
+          dailyGoalMinutes: selection.dailyGoalMinutes
+        }
+      }
+    }));
+  }, []);
+
   const skillScore = useCallback(
     (conceptId: ContentId, skill: LearningSkill) => {
       const state = snapshot.mastery[conceptId]?.skills[skill];
@@ -230,6 +257,7 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
       updatePreferences,
       updatePrivacy,
       grantMicrophoneConsent,
+      completeOnboarding,
       skillScore,
       resetProgress
     }),
@@ -243,6 +271,7 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
       updatePreferences,
       updatePrivacy,
       grantMicrophoneConsent,
+      completeOnboarding,
       skillScore,
       resetProgress
     ]
