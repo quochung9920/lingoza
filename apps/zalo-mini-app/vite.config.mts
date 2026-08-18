@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import zaloMiniApp from "zmp-vite-plugin";
 
-const repositoryRoot = fileURLToPath(new URL("../../..", import.meta.url));
+const repositoryRoot = fileURLToPath(new URL("../..", import.meta.url));
 
 export default defineConfig({
   root: "./src",
