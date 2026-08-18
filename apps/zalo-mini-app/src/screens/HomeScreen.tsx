@@ -2,6 +2,7 @@ import { useMemo } from "react";
 
 import type { ContentId } from "../../../../packages/content-schema/src/index";
 import { courseProgress, nextLesson } from "../../../../packages/curriculum-engine/src/index";
+import type { LearningGoal } from "../../../../packages/persistence/src/index";
 import { useContent } from "../app/content-provider";
 import { useLearner } from "../app/learner-provider";
 import {
@@ -14,15 +15,13 @@ import {
 } from "../components/primitives";
 import { ct, t } from "../lib/i18n";
 
-/**
- * Home 2.0.
- *
- * The screen answers one question -- "what do I do next?" -- and everything
- * else is subordinate to it. The next-lesson card is the largest element on
- * the screen and is chosen by the curriculum engine, not by a "continue where
- * you left off" bookmark, so a learner who has drifted gets pointed at the
- * right thing rather than the last thing.
- */
+const GOAL_LABEL: Record<LearningGoal, string> = {
+  conversation: "Giao tiếp",
+  travel: "Du lịch",
+  work: "Công việc",
+  study: "Học tập",
+  hsk: "HSK"
+};
 
 function greetingKey(): Parameters<typeof ct>[0] {
   const hour = new Date().getHours();
@@ -34,11 +33,13 @@ function greetingKey(): Parameters<typeof ct>[0] {
 export function HomeScreen({
   onOpenLesson,
   onOpenUnit,
+  onOpenCourse,
   onOpenReview,
   onOpenTopic
 }: {
   onOpenLesson: (lessonId: ContentId) => void;
   onOpenUnit: (unitId: ContentId) => void;
+  onOpenCourse: () => void;
   onOpenReview: () => void;
   onOpenTopic: (topicId: ContentId) => void;
 }) {
@@ -64,6 +65,7 @@ export function HomeScreen({
   const topics = useMemo(() => content.coveredTopics().slice(0, 8), [content]);
   const streak = snapshot.profile.streak.current;
   const reviewMinutes = Math.max(1, Math.round(reviewPlan.estimatedSeconds / 60));
+  const completedLessons = snapshot.profile.completedLessonIds.length;
 
   return (
     <div className="lz-stack">
@@ -72,11 +74,9 @@ export function HomeScreen({
           <p className="lz-eyebrow lz-eyebrow--on-accent">
             {content.bundle.profile.flag} {t(content.bundle.profile.name)}
           </p>
-          {streak > 0 ? (
-            <span className="lz-pill lz-pill--on-accent">
-              🔥 {streak} {ct("home.streak")}
-            </span>
-          ) : null}
+          <span className="lz-pill lz-pill--on-accent">
+            {streak > 0 ? `🔥 ${streak} ${ct("home.streak")}` : `🎯 ${GOAL_LABEL[snapshot.profile.learningGoal]}`}
+          </span>
         </div>
 
         <h2 style={{ margin: "8px 0 4px", fontSize: "var(--lz-text-2xl)", letterSpacing: "-0.02em" }}>
@@ -106,14 +106,14 @@ export function HomeScreen({
             🎯 {t(suggestion.lesson.canDo)}
           </p>
           <PrimaryButton onClick={() => onOpenLesson(suggestion.lesson.id)}>
-            {ct("home.continue")}
+            ▶ {ct("home.continue")}
           </PrimaryButton>
           <button
             type="button"
             className="lz-btn lz-btn--ghost lz-btn--block"
             onClick={() => onOpenUnit(suggestion.unit.id)}
           >
-            {t(suggestion.unit.title)} →
+            Xem {t(suggestion.unit.title)} →
           </button>
         </Card>
       ) : (
@@ -122,25 +122,45 @@ export function HomeScreen({
         </Card>
       )}
 
-      <div className="lz-stack lz-stack--tight">
-        <SectionHeading title={ct("home.today")} />
-        {reviewPlan.slots.length > 0 ? (
-          <InteractiveCard onClick={onOpenReview}>
-            <div className="lz-row lz-row--between">
-              <div>
-                <strong>{ct("home.review")}</strong>
-                <p className="lz-muted">
-                  {reviewPlan.slots.length} {ct("common.items")} · ~{reviewMinutes} {ct("common.minutes")}
-                </p>
-              </div>
-              <span className="lz-pill">▶</span>
+      <div className="lz-mini-metric-grid" aria-label="Tóm tắt học tập">
+        <div className="lz-mini-metric">
+          <strong>{snapshot.profile.preferences.dailyGoalMinutes}</strong>
+          <small>phút mục tiêu / ngày</small>
+        </div>
+        <div className="lz-mini-metric">
+          <strong>{reviewPlan.slots.length}</strong>
+          <small>nội dung cần ưu tiên ôn</small>
+        </div>
+        <div className="lz-mini-metric">
+          <strong>{completedLessons}</strong>
+          <small>bài đã hoàn thành</small>
+        </div>
+      </div>
+
+      <div className="lz-home-actions">
+        <InteractiveCard onClick={onOpenCourse} ariaLabel="Mở lộ trình học">
+          <div className="lz-row lz-row--between">
+            <div>
+              <strong>🗺️ Lộ trình học</strong>
+              <p className="lz-muted">Xem cấp độ, unit và bài đã mở.</p>
             </div>
-          </InteractiveCard>
-        ) : (
-          <Card variant="muted">
-            <p className="lz-muted">{ct("home.reviewEmpty")}</p>
-          </Card>
-        )}
+            <span className="lz-pill">→</span>
+          </div>
+        </InteractiveCard>
+
+        <InteractiveCard onClick={onOpenReview} ariaLabel="Mở ôn tập hôm nay">
+          <div className="lz-row lz-row--between">
+            <div>
+              <strong>🔁 {ct("home.review")}</strong>
+              <p className="lz-muted">
+                {reviewPlan.slots.length > 0
+                  ? `${reviewPlan.slots.length} ${ct("common.items")} · ~${reviewMinutes} ${ct("common.minutes")}`
+                  : "Chưa có nội dung đến hạn."}
+              </p>
+            </div>
+            <span className="lz-pill">▶</span>
+          </div>
+        </InteractiveCard>
       </div>
 
       {topics.length > 0 ? (
