@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 
-import type { ContentId } from "../../../../packages/content-schema/src/index";
+import type { ContentId, Topic } from "../../../../packages/content-schema/src/index";
 import { courseProgress, nextLesson } from "../../../../packages/curriculum-engine/src/index";
 import type { LearningGoal } from "../../../../packages/persistence/src/index";
 import { useContent } from "../app/content-provider";
@@ -22,6 +22,24 @@ const GOAL_LABEL: Record<LearningGoal, string> = {
   study: "Học tập",
   hsk: "HSK"
 };
+
+/**
+ * Goal selection never bypasses prerequisites; it only changes discovery
+ * priority among content the curriculum already contains.
+ */
+const GOAL_TOPIC_HINTS: Record<LearningGoal, readonly string[]> = {
+  conversation: ["people", "daily-life", "food"],
+  travel: ["travel", "transport", "food", "daily-life"],
+  work: ["work", "business", "people", "daily-life"],
+  study: ["school", "university", "daily-life", "people"],
+  hsk: ["daily-life", "people", "food"]
+};
+
+function topicPriority(topic: Topic, goal: LearningGoal): number {
+  const hints = GOAL_TOPIC_HINTS[goal];
+  const matched = hints.findIndex((hint) => topic.id === hint || topic.id.startsWith(`${hint}.`));
+  return matched < 0 ? hints.length + topic.order : matched;
+}
 
 function greetingKey(): Parameters<typeof ct>[0] {
   const hour = new Date().getHours();
@@ -62,7 +80,17 @@ export function HomeScreen({
     ? content.graph.level(suggestion.course.level)
     : content.graph.level(snapshot.profile.currentLevel);
 
-  const topics = useMemo(() => content.coveredTopics().slice(0, 8), [content]);
+  const topics = useMemo(
+    () =>
+      [...content.coveredTopics()]
+        .sort(
+          (a, b) =>
+            topicPriority(a, snapshot.profile.learningGoal) -
+              topicPriority(b, snapshot.profile.learningGoal) || a.order - b.order
+        )
+        .slice(0, 8),
+    [content, snapshot.profile.learningGoal]
+  );
   const streak = snapshot.profile.streak.current;
   const reviewMinutes = Math.max(1, Math.round(reviewPlan.estimatedSeconds / 60));
   const completedLessons = snapshot.profile.completedLessonIds.length;
@@ -165,7 +193,10 @@ export function HomeScreen({
 
       {topics.length > 0 ? (
         <div className="lz-stack lz-stack--tight">
-          <SectionHeading title={ct("home.topics")} />
+          <SectionHeading
+            title={ct("home.topics")}
+            eyebrow={`ƯU TIÊN: ${GOAL_LABEL[snapshot.profile.learningGoal].toUpperCase()}`}
+          />
           <div className="lz-topic-grid">
             {topics.map((topic) => (
               <button
