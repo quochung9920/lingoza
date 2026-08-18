@@ -13,14 +13,15 @@ import {
   buildCurriculumGraph,
   type CurriculumGraph
 } from "../../../../packages/curriculum-engine/src/index";
+import { loadLanguageBundle } from "./language-registry";
+import { useLearner } from "./learner-provider";
 
 /**
  * Loads the active language pack and exposes resolved views of it.
  *
- * The pack is imported dynamically so it lands in its own chunk: a language
- * pack is pure data and grows without bound, and there is no reason for a
- * learner opening the app to download Chinese A2 content before the first
- * screen paints.
+ * Packs are loaded through the language registry, not by a Chinese-specific
+ * import. This keeps the learner client language-neutral while still shipping
+ * only the language data the learner actually needs.
  */
 
 export interface ContentValue {
@@ -32,8 +33,14 @@ export interface ContentValue {
   topic(id: ContentId): Topic | undefined;
   scenario(id: ContentId): ContentBundle["scenarios"][number] | undefined;
   assessment(id: ContentId): ContentBundle["assessments"][number] | undefined;
-  /** Root topics that the shipped content actually covers. */
+  /** Root topic cards backed by at least one real lesson. */
   coveredTopics(): Topic[];
+  /** Lessons filed at, or beneath, the selected topic. */
+  lessonsForTopic(topicId: ContentId): ContentBundle["lessons"];
+  /** Units filed at, or beneath, the selected topic. */
+  unitsForTopic(topicId: ContentId): ContentBundle["units"];
+  /** Conversation scenarios filed at, or beneath, the selected topic. */
+  scenariosForTopic(topicId: ContentId): ContentBundle["scenarios"];
 }
 
 const ContentContext = createContext<ContentValue | null>(null);
@@ -47,6 +54,9 @@ function buildValue(bundle: ContentBundle): ContentValue {
   const scenarios = new Map(bundle.scenarios.map((entry) => [entry.id, entry]));
   const assessments = new Map(bundle.assessments.map((entry) => [entry.id, entry]));
   const topicIndex = buildTopicIndex(bundle.topics);
+
+  const within = (candidateIds: readonly ContentId[], ancestorId: ContentId) =>
+    candidateIds.some((candidateId) => topicIndex.isWithin(candidateId, ancestorId));
 
   // Only surface topics some lesson actually teaches: a home screen full of
   // topics that lead nowhere is worse than a short one that does not.
@@ -71,7 +81,14 @@ function buildValue(bundle: ContentBundle): ContentValue {
       topicIndex
         .roots()
         .filter((topic) => usedTopicIds.has(topic.id))
-        .flatMap((root) => topicIndex.childrenOf(root.id).filter((child) => usedTopicIds.has(child.id)))
+        .flatMap((root) => {
+          const children = topicIndex.childrenOf(root.id).filter((child) => usedTopicIds.has(child.id));
+          return children.length > 0 ? children : [root];
+        }),
+    lessonsForTopic: (topicId) => bundle.lessons.filter((lesson) => within(lesson.topics, topicId)),
+    unitsForTopic: (topicId) => bundle.units.filter((unit) => within(unit.topics, topicId)),
+    scenariosForTopic: (topicId) =>
+      bundle.scenarios.filter((scenario) => within(scenario.topics, topicId))
   };
 }
 
@@ -84,6 +101,8 @@ export function ContentProvider({
   fallback: ReactNode;
   errorState: (retry: () => void) => ReactNode;
 }) {
+  const { snapshot } = useLearner();
+  const activeLanguage = snapshot.profile.activeLanguage;
   const [bundle, setBundle] = useState<ContentBundle | null>(null);
   const [status, setStatus] = useState<ContentStatus>("loading");
   const [attempt, setAttempt] = useState(0);
@@ -91,11 +110,12 @@ export function ContentProvider({
   useEffect(() => {
     let cancelled = false;
     setStatus("loading");
+    setBundle(null);
 
-    import("../../../../language-packs/zh-CN/src/index")
-      .then((pack) => {
+    void loadLanguageBundle(activeLanguage)
+      .then((nextBundle) => {
         if (cancelled) return;
-        setBundle(pack.chineseBundle);
+        setBundle(nextBundle);
         setStatus("ready");
       })
       .catch(() => {
@@ -105,7 +125,7 @@ export function ContentProvider({
     return () => {
       cancelled = true;
     };
-  }, [attempt]);
+  }, [activeLanguage, attempt]);
 
   const value = useMemo(() => (bundle ? buildValue(bundle) : null), [bundle]);
 
