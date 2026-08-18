@@ -5,19 +5,20 @@ import type {
   AudioSpeed,
   ContentId,
   ExampleSentence,
+  LanguageData,
   LexicalItem
 } from "../../../../packages/content-schema/src/index";
 import { useAudio } from "../app/audio-provider";
+import { useContent } from "../app/content-provider";
 import { useLearner } from "../app/learner-provider";
 import { ct, t } from "../lib/i18n";
 
 /**
  * The audio layer of the UI.
  *
- * `AudioButton` and `AudioText` are the components that make the Universal
- * Audio Rule hold in practice: no screen renders target-language text as a bare
- * string, it renders an `AudioText`, and an `AudioText` cannot exist without a
- * speaker.
+ * `AudioButton` and `AudioText` make the Universal Audio Rule hold in
+ * practice: target-language text is paired with a speaker everywhere it is
+ * rendered through these content-aware components.
  */
 
 export interface AudioButtonProps {
@@ -33,14 +34,6 @@ export interface AudioButtonProps {
   onPlayed?: () => void;
 }
 
-/**
- * The universal speaker button.
- *
- * Reviewed audio is preferred. Seed content whose recording is still marked
- * unavailable falls back to the host device's speech synthesis when supported,
- * so the learner can tap every speaker during development/testing without
- * changing the content's production-review status.
- */
 export function AudioButton({
   ownerId,
   asset,
@@ -88,7 +81,6 @@ export function AudioButton({
   );
 }
 
-/** Explicit slow-playback control, used where the learner needs it prominently. */
 export function SlowAudioButton({
   ownerId,
   asset,
@@ -181,36 +173,54 @@ export interface AudioTextProps {
   text: string;
   asset: AudioAsset | undefined;
   lang?: string;
+  /** Pack-owned data keyed by LanguageProfile.supportLayers. */
+  languageData?: LanguageData;
+  /** Generic fallback kept for imported content that only has romanization. */
   romanization?: string;
   translation?: string;
   size?: "sm" | "md" | "lg";
-  /** Force-show support layers regardless of preference (e.g. after a hint). */
+  /** Force-show available support layers regardless of preference. */
   forceSupport?: boolean;
 }
 
 /**
- * Target-language text with its speaker, romanization and translation.
- *
- * Which support layers appear is a learner preference, not a per-screen
- * decision: someone at A0 wants pinyin on everything, and the same person at
- * A2 wants it gone everywhere at once.
+ * Target-language text with its speaker, optional pack-declared reading aids
+ * and translation. The component does not know what "pinyin", "romaji" or
+ * "traditional" means: it renders support-layer keys declared by the active
+ * language profile and looks their values up dynamically in `languageData`.
  */
 export function AudioText({
   ownerId,
   text,
   asset,
   lang = "zh-CN",
+  languageData,
   romanization,
   translation,
   size = "md",
   forceSupport = false
 }: AudioTextProps) {
+  const { bundle } = useContent();
   const { snapshot } = useLearner();
   const preferences = snapshot.profile.preferences;
-  const showRomanization =
-    forceSupport || preferences.visibleSupportLayers.includes("pinyin");
   const showTranslation = forceSupport || preferences.showTranslation;
 
+  const supportRows = bundle.profile.supportLayers.flatMap((layer) => {
+    if (!forceSupport && !preferences.visibleSupportLayers.includes(layer.key)) return [];
+    const raw = languageData?.[layer.key];
+    if (typeof raw === "string" && raw.trim()) {
+      return [{ key: layer.key, label: t(layer.label), value: raw.trim() }];
+    }
+    if (typeof raw === "number") {
+      return [{ key: layer.key, label: t(layer.label), value: String(raw) }];
+    }
+    return [];
+  });
+
+  // Imported legacy content may have only the generic romanization field. It
+  // remains visible when support is forced, but new packs should populate
+  // languageData according to their declared support-layer keys.
+  const fallbackRomanization = forceSupport && supportRows.length === 0 ? romanization : undefined;
   const sizeClass = size === "lg" ? " lz-target--lg" : size === "sm" ? " lz-target--sm" : "";
 
   return (
@@ -219,7 +229,13 @@ export function AudioText({
         <p className={`lz-target${sizeClass}`} lang={lang}>
           {text}
         </p>
-        {showRomanization && romanization ? <p className="lz-romanization">{romanization}</p> : null}
+        {supportRows.map((row) => (
+          <p className="lz-support-layer" key={row.key} data-layer={row.key}>
+            <span className="lz-visually-hidden">{row.label}: </span>
+            {row.value}
+          </p>
+        ))}
+        {fallbackRomanization ? <p className="lz-support-layer">{fallbackRomanization}</p> : null}
         {showTranslation && translation ? <p className="lz-translation">{translation}</p> : null}
       </div>
       <AudioButton
@@ -237,7 +253,6 @@ export function AudioText({
 /* Content-aware wrappers                                              */
 /* ------------------------------------------------------------------ */
 
-/** `AudioText` for a sentence, reading everything from the content object. */
 export function SentenceText({
   sentence,
   size = "md",
@@ -254,6 +269,7 @@ export function SentenceText({
       text={sentence.text}
       asset={sentence.audio}
       lang={sentence.language}
+      languageData={sentence.languageData}
       romanization={sentence.romanization}
       translation={t(sentence.translation)}
       size={size}
@@ -262,7 +278,6 @@ export function SentenceText({
   );
 }
 
-/** `AudioText` for a lexical item. */
 export function ItemText({
   item,
   size = "md",
@@ -279,6 +294,7 @@ export function ItemText({
       text={item.text}
       asset={item.audio}
       lang={item.language}
+      languageData={item.languageData}
       romanization={item.romanization}
       translation={t(item.meaning)}
       size={size}
