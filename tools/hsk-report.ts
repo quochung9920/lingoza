@@ -63,17 +63,21 @@ const bands = program.bands.map((band) => {
     band: band.ordinal,
     label: band.label["vi-VN"] ?? band.label["en-US"],
     stage: band.stage,
-    status: band.status,
+    developmentStatus: band.developmentStatus,
+    releaseStatus: band.status,
     syllabusBucket: productionPlan?.syllabusBucket ?? null,
-    currentContribution: {
+    curriculumBlueprint: {
+      developed: band.developmentStatus === "developed",
+      authoringThemes: productionPlan?.themes.length ?? 0,
+      productionTargets: productionPlan?.productionTargets ?? null
+    },
+    currentLearnerContent: {
       courses: courses.length,
       units: units.length,
       lessons: lessonIds.length,
       concepts: concepts.length,
       lexicalItems: lexicalItems.length
     },
-    commercialProductionTarget: productionPlan?.productionTargets ?? null,
-    authoringThemes: productionPlan?.themes.length ?? 0,
     productionReadiness: {
       lexicalRecordingsReady: lexicalItems.length - missingLexicalRecordings,
       lexicalRecordingsMissing: missingLexicalRecordings,
@@ -92,6 +96,7 @@ const bands = program.bands.map((band) => {
 const ordinals = program.bands.map((band) => band.ordinal);
 const hasNineOrderedBands =
   ordinals.length === 9 && ordinals.every((ordinal, index) => ordinal === index + 1);
+const allCurriculaDeveloped = program.bands.every((band) => band.developmentStatus === "developed");
 
 console.log("LINGOZA HSK 1-9 READINESS");
 console.log(
@@ -101,6 +106,7 @@ console.log(
       alignmentReference: program.alignmentReference.reference,
       referenceCatalogStatus: hskReferenceCatalog.status,
       nineBandStructureValid: hasNineOrderedBands,
+      allCurriculaDeveloped,
       productionPlanBands: HSK_PRODUCTION_PLAN.length,
       capabilityParity: {
         externalStandardDimensions: HSK_STANDARD_CAPABILITY_DIMENSIONS,
@@ -110,6 +116,7 @@ console.log(
       },
       policy: {
         certificationClaim: false,
+        curriculumDevelopmentIsSeparateFromReleaseReadiness: true,
         availableRequiresReferenceCoverage: true,
         availableRequiresProductionAudio: true,
         availableRequiresHumanReview: true,
