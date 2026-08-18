@@ -3,13 +3,13 @@ import type { AudioFeatures } from "../../../../packages/pronunciation-engine/sr
 /**
  * Microphone capture and acoustic feature extraction.
  *
- * The recorder exists to produce two things: a blob the learner can play back
- * to themselves, and an `AudioFeatures` frame series for the model-free
- * evaluator. Nothing is uploaded, and by default nothing is kept -- the blob's
- * object URL is revoked as soon as the attempt is discarded.
+ * The recorder produces three things from one short learner attempt:
+ * - the original browser recording for immediate local playback;
+ * - deterministic acoustic features used by Lingoza's local prosody scorer;
+ * - a 16 kHz mono PCM WAV blob suitable for the optional pronunciation gateway.
  *
- * Permission is requested at `start()`, i.e. the moment the learner taps the
- * microphone, never at app launch.
+ * Nothing is uploaded by this module. Uploading the assessment blob is a
+ * separate, explicit-consent decision made by the speaking surface.
  */
 
 export type RecorderStatus =
@@ -23,7 +23,10 @@ export type RecorderStatus =
 export interface Recording {
   /** Object URL for learner playback. Revoke via `disposeRecording`. */
   url: string;
+  /** Original MediaRecorder container, used only for local playback. */
   blob: Blob;
+  /** Normalized 16 kHz mono PCM WAV for an opt-in speech assessment provider. */
+  assessmentAudio: Blob;
   durationMs: number;
   features: AudioFeatures;
   /** Downsampled envelope for the waveform, 0..1. */
@@ -32,6 +35,7 @@ export interface Recording {
 
 const FRAME_MS = 20;
 const WAVEFORM_BARS = 48;
+const ASSESSMENT_SAMPLE_RATE = 16_000;
 
 export function isRecordingSupported(): boolean {
   return (
@@ -48,9 +52,8 @@ export function isRecordingSupported(): boolean {
  * Autocorrelation pitch detection over one frame.
  *
  * Chosen over FFT-based methods because it is short, dependency-free, and
- * accurate enough for *contour* comparison, which is all the evaluator claims
- * to measure. It returns 0 for frames with too little energy or no clear
- * period, and those frames are treated as unvoiced rather than as pitch zero.
+ * accurate enough for contour comparison. It returns 0 for frames with too
+ * little energy or no clear period; those frames are treated as unvoiced.
  */
 function detectPitch(frame: Float32Array, sampleRate: number): number {
   const size = frame.length;
@@ -60,8 +63,6 @@ function detectPitch(frame: Float32Array, sampleRate: number): number {
   rms = Math.sqrt(rms / size);
   if (rms < 0.01) return 0;
 
-  // Human speech f0 sits roughly in 70-400 Hz; searching outside that range
-  // mostly finds octave errors.
   const minPeriod = Math.floor(sampleRate / 400);
   const maxPeriod = Math.floor(sampleRate / 70);
 
@@ -84,10 +85,71 @@ function detectPitch(frame: Float32Array, sampleRate: number): number {
   return sampleRate / bestPeriod;
 }
 
-/** Decodes a recorded blob into per-frame pitch and energy. */
+function writeAscii(view: DataView, offset: number, text: string): void {
+  for (let i = 0; i < text.length; i += 1) view.setUint8(offset + i, text.charCodeAt(i));
+}
+
+/**
+ * Converts decoded browser audio into the format accepted by the short-audio
+ * pronunciation gateway: 16 kHz, mono, signed 16-bit PCM WAV.
+ *
+ * Resampling is linear and channel mixing is an arithmetic mean. This is not a
+ * studio encoder; it is intentionally small and deterministic for short speech
+ * attempts where intelligibility matters more than music-grade fidelity.
+ */
+export function encodeAssessmentWav(
+  buffer: AudioBuffer,
+  targetSampleRate = ASSESSMENT_SAMPLE_RATE
+): Blob {
+  const sourceRate = buffer.sampleRate;
+  const outputLength = Math.max(1, Math.round(buffer.duration * targetSampleRate));
+  const bytesPerSample = 2;
+  const wav = new ArrayBuffer(44 + outputLength * bytesPerSample);
+  const view = new DataView(wav);
+
+  writeAscii(view, 0, "RIFF");
+  view.setUint32(4, 36 + outputLength * bytesPerSample, true);
+  writeAscii(view, 8, "WAVE");
+  writeAscii(view, 12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, targetSampleRate, true);
+  view.setUint32(28, targetSampleRate * bytesPerSample, true);
+  view.setUint16(32, bytesPerSample, true);
+  view.setUint16(34, 16, true);
+  writeAscii(view, 36, "data");
+  view.setUint32(40, outputLength * bytesPerSample, true);
+
+  const channels = Array.from(
+    { length: buffer.numberOfChannels },
+    (_, channel) => buffer.getChannelData(channel)
+  );
+
+  for (let i = 0; i < outputLength; i += 1) {
+    const sourcePosition = (i * sourceRate) / targetSampleRate;
+    const low = Math.min(Math.floor(sourcePosition), buffer.length - 1);
+    const high = Math.min(low + 1, buffer.length - 1);
+    const fraction = sourcePosition - low;
+
+    let mono = 0;
+    for (const channel of channels) {
+      mono += channel[low] + (channel[high] - channel[low]) * fraction;
+    }
+    mono /= Math.max(1, channels.length);
+    const clamped = Math.max(-1, Math.min(1, mono));
+    const pcm = clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff;
+    view.setInt16(44 + i * bytesPerSample, Math.round(pcm), true);
+  }
+
+  return new Blob([wav], { type: "audio/wav" });
+}
+
+/** Decodes a recorded blob into acoustic features and assessment audio. */
 export async function extractFeatures(blob: Blob): Promise<{
   features: AudioFeatures;
   envelope: number[];
+  assessmentAudio: Blob;
 }> {
   const AudioCtor =
     window.AudioContext ??
@@ -115,8 +177,6 @@ export async function extractFeatures(blob: Blob): Promise<{
       pitchHz.push(detectPitch(frame as Float32Array, sampleRate));
     }
 
-    // Normalize energy against this recording's own peak so a quiet phone mic
-    // is not scored as poor rhythm.
     const normalized = peak > 0 ? energy.map((value) => value / peak) : energy;
 
     const envelope: number[] = [];
@@ -133,7 +193,8 @@ export async function extractFeatures(blob: Blob): Promise<{
         frameMs: FRAME_MS,
         durationMs: buffer.duration * 1000
       },
-      envelope
+      envelope,
+      assessmentAudio: encodeAssessmentWav(buffer)
     };
   } finally {
     void context.close();
@@ -147,14 +208,7 @@ export interface SpeechRecorder {
   cancel(): void;
 }
 
-/**
- * Creates a recorder bound to one microphone session.
- *
- * The media stream's tracks are stopped after every attempt rather than held
- * open between them. That costs a few hundred milliseconds on the next tap and
- * buys the learner a microphone indicator that is only lit while they are
- * actually being recorded.
- */
+/** Creates a recorder bound to one microphone session. */
 export function createSpeechRecorder(): SpeechRecorder {
   let recorder: MediaRecorder | null = null;
   let stream: MediaStream | null = null;
@@ -201,13 +255,12 @@ export function createSpeechRecorder(): SpeechRecorder {
       recorder = null;
 
       const wallClockMs = Date.now() - startedAt;
-      const { features, envelope } = await extractFeatures(blob);
+      const { features, envelope, assessmentAudio } = await extractFeatures(blob);
 
       return {
         blob,
+        assessmentAudio,
         url: URL.createObjectURL(blob),
-        // Decoded duration is authoritative; wall clock is the fallback when a
-        // container reports no duration, which some webviews do.
         durationMs: features.durationMs > 0 ? features.durationMs : wallClockMs,
         features,
         envelope
@@ -231,13 +284,9 @@ export function disposeRecording(recording: Recording | null): void {
 /**
  * Synthesises reference features from an authored clip's metadata.
  *
- * Real reference recordings do not exist yet, so comparing a learner's attempt
- * against a real waveform is impossible today. Rather than fabricate a
- * plausible-looking pitch track and pass off the resulting numbers as tone
- * feedback, this builds a flat reference from the authored duration and
- * segment boundaries: pace and pausing remain genuinely measurable against it,
- * while tone and rhythm correlate against a constant and are therefore
- * reported as unavailable by the evaluator. That is the honest degradation.
+ * Until native reference waveforms are authored, this keeps pitch at zero so
+ * tone/rhythm are reported unavailable rather than fabricated. Duration and
+ * phrase gaps still make pace and pause placement measurable.
  */
 export function referenceFeaturesFromMetadata(
   durationMs: number,
@@ -247,8 +296,6 @@ export function referenceFeaturesFromMetadata(
   const energy = new Array<number>(frameCount).fill(0.8);
 
   if (segments && segments.length > 1) {
-    // Mark the gaps between authored phrases as silence so pause placement is
-    // compared against something real.
     for (let i = 0; i < segments.length - 1; i += 1) {
       const gapStart = Math.floor(segments[i].endMs / FRAME_MS);
       const gapEnd = Math.floor(segments[i + 1].startMs / FRAME_MS);
