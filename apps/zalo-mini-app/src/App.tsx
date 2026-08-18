@@ -11,6 +11,7 @@ import { HomeScreen } from "./screens/HomeScreen";
 import { LessonPlayer } from "./screens/LessonPlayer";
 import { OnboardingScreen } from "./screens/OnboardingScreen";
 import { ConversationScreen, PracticeScreen, ProgressScreen } from "./screens/PracticeScreens";
+import { SettingsScreen } from "./screens/SettingsScreen";
 import { TopicScreen } from "./screens/TopicScreen";
 import { CourseMapScreen, UnitScreen } from "./screens/UnitScreen";
 
@@ -20,7 +21,8 @@ type Route =
   | { name: "unit"; unitId: ContentId }
   | { name: "lesson"; lessonId: ContentId }
   | { name: "topic"; topicId: ContentId }
-  | { name: "scenario"; scenarioId: ContentId };
+  | { name: "scenario"; scenarioId: ContentId }
+  | { name: "settings" };
 
 function AppContent() {
   const [stack, setStack] = useState<Route[]>([{ name: "tab", tab: "learn" }]);
@@ -46,6 +48,14 @@ function AppContent() {
   }
 
   const nav = <BottomNav active={route.name === "tab" ? route.tab : "learn"} onChange={selectTab} />;
+
+  if (route.name === "settings") {
+    return (
+      <AppShell header={<MiniAppSafeHeader title="Cài đặt học" onBack={pop} bordered />} nav={nav}>
+        <SettingsScreen />
+      </AppShell>
+    );
+  }
 
   if (route.name === "unit") {
     return (
@@ -98,7 +108,16 @@ function AppContent() {
     case "progress":
       return (
         <AppShell header={<MiniAppSafeHeader title={ct("nav.progress")} />} nav={nav}>
-          <ProgressScreen onPractice={() => selectTab("speak")} />
+          <div className="lz-stack">
+            <button
+              type="button"
+              className="lz-btn lz-btn--secondary lz-btn--block"
+              onClick={() => push({ name: "settings" })}
+            >
+              ⚙️ Cài đặt cách học
+            </button>
+            <ProgressScreen onPractice={() => selectTab("speak")} />
+          </div>
         </AppShell>
       );
     case "learn":
