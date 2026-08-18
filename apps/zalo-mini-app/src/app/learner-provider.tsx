@@ -71,6 +71,8 @@ export interface LearnerValue {
   updatePrivacy(patch: Partial<PrivacySettings>): void;
   grantMicrophoneConsent(): void;
   completeOnboarding(selection: OnboardingSelection): void;
+  /** Reopens onboarding but intentionally keeps mastery, SRS and completions. */
+  restartOnboarding(): void;
   skillScore(conceptId: ContentId, skill: LearningSkill): number;
   resetProgress(): void;
 }
@@ -224,6 +226,13 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
+  const restartOnboarding = useCallback(() => {
+    setSnapshot((previous) => ({
+      ...previous,
+      profile: { ...previous.profile, onboardingCompleted: false }
+    }));
+  }, []);
+
   const skillScore = useCallback(
     (conceptId: ContentId, skill: LearningSkill) => {
       const state = snapshot.mastery[conceptId]?.skills[skill];
@@ -250,6 +259,7 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
       updatePrivacy,
       grantMicrophoneConsent,
       completeOnboarding,
+      restartOnboarding,
       skillScore,
       resetProgress
     }),
@@ -265,6 +275,7 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
       updatePrivacy,
       grantMicrophoneConsent,
       completeOnboarding,
+      restartOnboarding,
       skillScore,
       resetProgress
     ]
