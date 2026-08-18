@@ -1,16 +1,16 @@
 {
   "app": {
     "title": "Lingoza",
-    "textColor": {
-      "light": "black",
-      "dark": "white"
-    },
-    "statusBar": "transparent",
+    "headerTitle": "Lingoza",
+    "headerColor": "#6d28d9",
+    "textColor": "white",
+    "statusBar": "normal",
     "actionBarHidden": true,
     "hideIOSSafeAreaBottom": true,
     "hideAndroidBottomNavigationBar": false
   },
-  "listCSS": [],
-  "listSyncJS": [],
+  "debug": false,
+  "listCSS": ["assets/app.css"],
+  "listSyncJS": ["assets/app.module.js"],
   "listAsyncJS": []
 }
