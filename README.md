@@ -32,6 +32,34 @@ The current vertical slice supports:
 
 The Chinese pack is intentionally a **representative A0/A1 vertical slice**, not yet a complete commercial course. Use `npm run report:content` to inspect its current coverage.
 
+## HSK 1-9 curriculum program
+
+Lingoza now carries a complete **nine-band production blueprint** for an HSK-aligned Chinese program. The blueprint lives in `language-packs/zh-CN/src/hsk-production-plan.ts` and defines, for every HSK 1-9 band:
+
+- ordered stage and examination-syllabus bucket
+- internal authoring themes
+- listening/speaking outcomes
+- minimum commercial production depth for units, lessons, reviewed utterances, conversation scenarios and assessments
+- explicit full-standard capability gaps instead of unsupported equivalence claims
+
+The production floors across all nine bands total **180 units, 900 lessons, 20,700 reviewed utterances, 820 conversation scenarios and 189 transfer assessments**. These are **Lingoza-owned production targets**, not official HSK item-count requirements and not evidence that the material has already been authored or reviewed.
+
+Current learner-content status remains deliberately conservative:
+
+- HSK 1: `building`, with the existing A0/A1 foundation contributing to it
+- HSK 2-9: `planned`
+- no HSK band is marked `available`
+- the exact HSK reference catalog remains review-gated before coverage percentages can be claimed
+- production audio and human linguistic/native/pedagogy/audio sign-off remain required before commercial release
+
+Lingoza's learner runtime is intentionally listening/speaking first. Full external-standard parity also involves reading, writing and translation; those dimensions are tracked as explicit parity gaps rather than being silently claimed as supported.
+
+Inspect the program and its production targets with:
+
+```powershell
+npm run report:hsk
+```
+
 ## Runtime architecture
 
 ```text
@@ -142,6 +170,7 @@ npm run check
 npm run check:zalo
 npm run build:zalo
 npm run report:content
+npm run report:hsk
 ```
 
 `npm run check` compiles the core, runs tests and validates content. CI also performs a production Zalo Mini App build.
@@ -202,10 +231,12 @@ npm run validate:content
 ## Current priorities
 
 1. Produce reviewed normal/slow Mandarin recordings and reference acoustic features.
-2. Expand Chinese A0 into a real multi-week course before scaling A1/A2.
-3. Increase authored review-item variation so review measures retrieval instead of exact lesson memory.
-4. Add Zalo identity and a server-backed learner repository for cross-device progress.
-5. Wire privacy-safe learning analytics and calibrate mastery/SRS from real retention data.
-6. Add an authoring/admin workflow once the production content model has stabilized.
+2. Author the HSK 1 production blueprint to its commercial depth before marking the band available.
+3. Populate and cross-check the HSK reference catalog so exact coverage can be measured without fabricated percentages.
+4. Scale authored HSK 2-9 learner content band by band while preserving review and audio gates.
+5. Increase authored review-item variation so review measures retrieval instead of exact lesson memory.
+6. Add Zalo identity and a server-backed learner repository for cross-device progress.
+7. Wire privacy-safe learning analytics and calibrate mastery/SRS from real retention data.
+8. Add an authoring/admin workflow once the production content model has stabilized.
 
 See `docs/ROADMAP.md` for the product milestones.
