@@ -2,6 +2,7 @@ import type { ContentId, LanguageTag, LocalizedText, Provenance } from "./common
 import type { Assessment } from "./assessment.js";
 import type { DialogueScenarioV2 } from "./dialogue.js";
 import type { ExampleSentence, LexicalItem, SyntaxPattern } from "./lexicon.js";
+import type { LearningProgram } from "./program.js";
 import type {
   ActivityKind,
   CefrReference,
@@ -311,6 +312,8 @@ export interface LanguageProfile {
  */
 export interface ContentBundle {
   profile: LanguageProfile;
+  /** Optional external-standard learning programs, e.g. an HSK 1-9 roadmap. */
+  programs?: LearningProgram[];
   levels: LevelDefinition[];
   topics: Topic[];
   concepts: Concept[];
