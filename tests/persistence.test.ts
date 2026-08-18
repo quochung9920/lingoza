@@ -14,6 +14,7 @@ describe("learner persistence", () => {
     expect(snapshot.profile.onboardingCompleted).toBe(false);
     expect(snapshot.profile.learningGoal).toBe("conversation");
     expect(snapshot.profile.preferences.dailyGoalMinutes).toBe(10);
+    expect(snapshot.profile.privacy.speechRecognitionOptIn).toBe(false);
   });
 
   it("migrates v1 progress without replaying onboarding or losing mastery", () => {
@@ -67,6 +68,33 @@ describe("learner persistence", () => {
     expect(migrated?.profile.learningGoal).toBe("conversation");
     expect(migrated?.profile.completedLessonIds).toEqual(["zh.lesson.greeting"]);
     expect(migrated?.profile.preferences.dailyGoalMinutes).toBe(15);
+    expect(migrated?.profile.privacy.speechRecognitionOptIn).toBe(false);
     expect(migrated?.mastery["greeting.basic"]?.skills.speaking?.score).toBe(0.8);
+  });
+
+  it("migrates v2 learners without silently enabling browser recognition", () => {
+    const current = createDefaultSnapshot("v2-user", "zh-CN", "vi-VN");
+    const previous = {
+      ...current,
+      schemaVersion: 2,
+      profile: {
+        ...current.profile,
+        onboardingCompleted: true,
+        learningGoal: "hsk" as const,
+        privacy: {
+          microphoneConsentGrantedAt: "2026-08-18T00:00:00.000Z",
+          keepRecordingsLocally: false,
+          recordingRetentionDays: 0,
+          analyticsOptIn: false
+        }
+      }
+    };
+
+    const migrated = migrateLearnerSnapshot(previous);
+
+    expect(migrated?.schemaVersion).toBe(LEARNER_SCHEMA_VERSION);
+    expect(migrated?.profile.onboardingCompleted).toBe(true);
+    expect(migrated?.profile.learningGoal).toBe("hsk");
+    expect(migrated?.profile.privacy.speechRecognitionOptIn).toBe(false);
   });
 });
