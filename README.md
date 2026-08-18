@@ -1,68 +1,100 @@
 # Lingoza
 
-Lingoza is a multilingual language-learning platform designed to run without an AI model at runtime.
+Lingoza is an audio-first, speaking-first language-learning platform. The first learner client is a Zalo Mini App; the learning core is language-neutral and designed to support additional clients and language packs later.
 
-The core idea is to pre-build linguistic knowledge as validated, structured language packs and teach through deterministic engines for answer evaluation, curriculum mastery, dialogue flow, and spaced repetition.
+## Product principles
 
-## Principles
+- **Listen and speak first.** If an activity can be spoken instead of typed, Lingoza prefers speech. The learner UI has no writing exercises.
+- **Every target-language utterance is playable.** Words, phrases, examples, prompts, answers and dialogue turns carry audio metadata and use the shared audio controls.
+- **No LLM or generative AI at learner runtime.** Curriculum, mastery, evaluation, dialogue flow and review scheduling are deterministic.
+- **Mastery is per skill, not `learned: true`.** Listening, meaning recognition, active recall, speaking, pronunciation/prosody, conversation and retention can progress separately.
+- **Content is data.** Language-specific knowledge lives in language packs; React screens consume the generic content contracts.
+- **Assessment measures transfer.** Checkpoints should test whether a learner can use a concept in a new context, not replay a memorized lesson string.
+- **Commercial content remains review-gated.** Automated validation does not replace native-speaker, pedagogy and audio review.
 
-- No LLM, generative model, or cloud inference at runtime. Ever.
-- Audio-first and speaking-first: if a drill can be spoken, it is spoken. There are no writing exercises and no free-text inputs anywhere in the learner UI.
-- Language knowledge is data, not hardcoded UI. The core is language-neutral; anything Chinese-specific lives in a `languageData` bag the framework never reads.
-- Every visible target-language string carries playable audio metadata. The content validator enforces this in CI.
-- Mastery is a per-skill, decaying vector — never a `learned: true` flag.
-- Assessments measure transfer, not recall of a rehearsed string.
-- Nothing publishes without four human review sign-offs recorded in its provenance.
+## Current learner experience
 
-### On speech feedback
+The current vertical slice supports:
 
-Lingoza ships no speech recognizer, so it never reports "pronunciation accuracy" or a phoneme score. `ModelFreeSpeechEvaluator` measures only what a waveform actually yields without a model — pitch contour, energy rhythm, pace and pause placement — and reports coarse measurements as qualitative bands rather than percentages. `SpeechEvaluationProvider` is the seam a real recognizer would slot into later; no learning code would change.
+- first-run onboarding for goal, starting band and daily practice budget
+- premium mobile-first Home with a curriculum-driven next lesson
+- A0/A1 course and unit map
+- real topic exploration into matching units, lessons and conversations
+- listening, listen-and-choose, repeat, shadowing, substitution, guided speaking and quick response
+- deterministic role-play conversations
+- microphone capture and learner playback
+- model-free prosody feedback architecture for pitch contour, rhythm, pace and pausing
+- multi-skill mastery and spaced repetition
+- adaptive review queue
+- skill-level progress dashboard
+- learner controls for Pinyin, translations, audio preferences, daily goal and privacy
+- persisted prototype progress in browser storage, behind a repository interface ready for a server adapter
 
-## Current structure
+The Chinese pack is intentionally a **representative A0/A1 vertical slice**, not yet a complete commercial course. Use `npm run report:content` to inspect its current coverage.
+
+## Runtime architecture
 
 ```text
-apps/
-  zalo-mini-app/          React + TypeScript learner client for Zalo Mini App
+Zalo Mini App
+     |
+Learner UI / Design System
+     |
+Providers / platform adapters
+     |
++---------------- Learning Core ----------------+
+| Curriculum | Mastery | SRS | Dialogue | Eval |
+| Assessment | Pronunciation | Content Validator|
++-----------------------------------------------+
+     |
+Language registry
+     |
+zh-CN pack today / more packs later
+```
 
+Core packages include:
+
+```text
 packages/
-  content-schema/         Every content contract: levels, skills, topics, lexicon,
-                          patterns, curriculum, dialogue, assessment, provenance
-  curriculum-engine/      Concept graph: prerequisites, unlocking, next lesson,
-                          learning paths, course/unit progress
-  mastery-engine/         Per-skill mastery with forgetting curves and at-risk detection
-  evaluation-engine/      Deterministic pattern/slot matching and structured feedback
-  dialogue-engine/        Role-play state machine with hints and failure recovery
-  pronunciation-engine/   SpeechEvaluationProvider + ModelFreeSpeechEvaluator
-  assessment-engine/      Transfer-oriented item selection and per-skill scoring
-  srs-engine/             Multi-skill spaced repetition and daily session assembly
-  content-validator/      The CI gate that makes the content rules real
-  analytics/              Event contracts (no provider wired up, no voice data)
-  persistence/            Repository interfaces + memory/web-storage adapters
-
-language-packs/
-  zh-CN/                  Reference pack: A0/A1 seed curriculum
-
-tools/
-  validate-content.ts     `npm run validate:content`
-
-tests/                    Behavioral tests for the learning core
+  content-schema/
+  curriculum-engine/
+  mastery-engine/
+  evaluation-engine/
+  dialogue-engine/
+  pronunciation-engine/
+  assessment-engine/
+  srs-engine/
+  content-validator/
+  persistence/
+  analytics/
 ```
 
-### Vertical slice
+## Audio status
 
-The shipped A0/A1 Chinese seed runs the full loop end to end: home suggests the next lesson from the concept graph → unit screen shows can-do outcomes and lesson locks → the lesson player runs listening, shadowing, substitution, guided speaking, quick response and a cafe role-play → each activity feeds the mastery engine → the SRS engine assembles tomorrow's review → the progress screen reflects the change.
-
-Answer evaluation still accepts natural variants through pattern slots rather than one exact string:
+The content schema already carries normal/slow recording paths, speaker metadata, durations and phrase segments. The learner client resolves production recordings beneath the active language pack path, for example:
 
 ```text
-我要一杯咖啡
-我想要一杯咖啡
-我想喝一杯咖啡
+<AUDIO_BASE>/zh-CN/items/...
+<AUDIO_BASE>/zh-CN/sentences/...
 ```
 
-### Audio status
+Set the production/staging root with:
 
-The pack ships authored audio *metadata* — paths, speeds, durations and phrase segments — but **no recordings exist yet**. The player degrades gracefully (speaker buttons render disabled and labelled rather than disappearing), and `npm run validate:content` reports every missing recording as a warning. Browser speech synthesis is deliberately not used as a stand-in. Audio is served from object storage/CDN via `VITE_LINGOZA_AUDIO_BASE`; none is bundled.
+```text
+VITE_LINGOZA_AUDIO_BASE
+```
+
+The seed pack does **not** yet contain reviewed recordings. While those assets are being produced, the app can use the host device's speech synthesis as a prototype/internal-test fallback so speaker buttons remain usable. `audio.available` stays false, and the content validator continues to report the missing reviewed recordings. Commercial releases should use pre-produced, reviewed audio served from CDN/object storage rather than relying on device speech synthesis.
+
+## Speaking feedback
+
+Lingoza currently ships no speech recognizer. It therefore does not claim phoneme-level or word-recognition accuracy. `ModelFreeSpeechEvaluator` is limited to signals that can be measured from audio without a recognizer:
+
+- pitch/tone contour when a real reference is available
+- rhythm/energy shape
+- pace
+- pause placement
+
+`SpeechEvaluationProvider` is the extension seam for a future recognizer-backed provider if the product policy changes. The learning core does not depend on one.
 
 ## Requirements
 
@@ -71,40 +103,69 @@ The pack ships authored audio *metadata* — paths, speeds, durations and phrase
 - npm
 - Zalo Mini App CLI (`zmp-cli`)
 
-No database, OpenAI key, GPU, or local AI model is required for the current client/core.
+No OpenAI key, GPU or AI model is required.
 
-## First-time setup
-
-Clone or update the repository:
-
-```powershell
-git clone https://github.com/quochung9920/lingoza.git
-cd lingoza
-```
-
-If you already cloned it:
+## Install
 
 ```powershell
 cd D:\lingoza
-git checkout main
-git pull origin main
-```
-
-Install the core and Mini App dependencies:
-
-```powershell
-npm install
+npm ci
 npm run setup:zalo
 ```
 
-Install Zalo Mini App CLI if it is not available yet:
+If ZMP CLI is not installed:
 
 ```powershell
 npm install -g zmp-cli
 zmp --version
 ```
 
-## Link this source code to the Lingoza Mini App
+## Run locally
+
+Local learner development uses **Vite**, not `zmp start`:
+
+```powershell
+cd D:\lingoza
+npm run dev:zalo
+```
+
+Open the local URL printed by Vite, normally:
+
+```text
+http://localhost:5173/
+```
+
+## Validate
+
+```powershell
+npm run check
+npm run check:zalo
+npm run build:zalo
+npm run report:content
+```
+
+`npm run check` compiles the core, runs tests and validates content. CI also performs a production Zalo Mini App build.
+
+## Deploy a Development build to Zalo
+
+The current app is deployed as an existing web project.
+
+```powershell
+cd D:\lingoza
+npm run build:zalo
+cd apps\zalo-mini-app
+zmp deploy
+```
+
+When prompted, use:
+
+```text
+Deploy your existing project
+Dist folder: dist
+Version: Development
+```
+
+Then open the generated Development entry/QR with the Zalo account that has access to the Mini App.
 
 Lingoza Mini App ID:
 
@@ -112,82 +173,39 @@ Lingoza Mini App ID:
 922579343002060000
 ```
 
-Run from the repository root:
-
-```powershell
-npm run zalo:init
-```
-
-When Zalo asks for the Mini App ID, enter `922579343002060000`.
-
-For an existing project, choose **Using ZMP to deploy only** and finish the Zalo login flow with the Zalo account that owns/manages the Lingoza Mini App.
-
-`zmp init` may generate local environment/configuration data. Local `.env` files are intentionally ignored by Git and must not be committed.
-
-## Run Lingoza
-
-After the first-time setup/linking step:
-
-```powershell
-npm run dev:zalo
-```
-
-ZMP starts the Mini App development environment. The initial learner UI includes:
-
-- daily learning progress
-- lesson cards
-- Chinese vocabulary from `language-packs/zh-CN`
-- a restaurant conversation scenario
-- deterministic natural-answer evaluation using `evaluation-engine`
-- no AI/model inference at runtime
-
-## Validate source code
-
-```powershell
-npm run check
-npm run check:zalo
-```
-
-## Deploy to Zalo
-
-Authenticate when needed:
-
-```powershell
-npm run zalo:login
-```
-
-Then deploy:
-
-```powershell
-npm run zalo:deploy
-```
-
-Use the Zalo account that has Admin/Developer permission for the Lingoza Mini App to complete any QR/login confirmation requested by Zalo.
-
-## Runtime architecture
+The authoritative Zalo build configuration lives only at:
 
 ```text
-Zalo Mini App / Future Web Clients
-                |
-          Learning Core
-      /      /      \       \
-Evaluation Curriculum Dialogue  SRS
-      \      \      /       /
-         Language Pack
-                |
-         Learner Progress
+apps/zalo-mini-app/app-config.json
 ```
 
-## Next milestones
+## Content quality
 
-1. Content validator and pack compiler.
-2. Rich semantic groups, synonyms, register and error taxonomy.
-3. Chinese normalization, Hanzi/Pinyin/tone-specific adapters.
-4. Universal topic/concept ontology.
-5. Lesson/exercise generation from templates.
-6. Persistent learner mastery model and API.
-7. Zalo user identity and permission integration.
-8. Admin authoring and content QA tools.
-9. Additional language packs using the same core contracts.
+The validator checks, among other rules:
 
-The repository is intentionally model-free at runtime. AI may be used during content authoring and QA, but generated content should be compiled and validated before shipping to learners.
+- duplicate and broken content IDs
+- invalid prerequisites and topic references
+- missing audio metadata / recordings
+- lessons without can-do outcomes
+- lessons without listening or speaking practice
+- invalid syntax slots
+- unreachable dialogue states and dead ends
+- assessment items that replay lesson prompts verbatim
+- publish status without required review evidence
+
+Run:
+
+```powershell
+npm run validate:content
+```
+
+## Current priorities
+
+1. Produce reviewed normal/slow Mandarin recordings and reference acoustic features.
+2. Expand Chinese A0 into a real multi-week course before scaling A1/A2.
+3. Increase authored review-item variation so review measures retrieval instead of exact lesson memory.
+4. Add Zalo identity and a server-backed learner repository for cross-device progress.
+5. Wire privacy-safe learning analytics and calibrate mastery/SRS from real retention data.
+6. Add an authoring/admin workflow once the production content model has stabilized.
+
+See `docs/ROADMAP.md` for the product milestones.
