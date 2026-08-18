@@ -6,7 +6,13 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "check": "npm run build && npm run test"
+    "check": "npm run build && npm run test",
+    "setup:zalo": "npm --prefix apps/zalo-mini-app install",
+    "dev:zalo": "npm --prefix apps/zalo-mini-app start",
+    "check:zalo": "npm --prefix apps/zalo-mini-app run check",
+    "zalo:init": "npm --prefix apps/zalo-mini-app run zalo:init",
+    "zalo:login": "npm --prefix apps/zalo-mini-app run zalo:login",
+    "zalo:deploy": "npm --prefix apps/zalo-mini-app run zalo:deploy"
   },
   "devDependencies": {
     "typescript": "^5.6.3",
