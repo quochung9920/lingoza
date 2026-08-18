@@ -19,5 +19,7 @@ if (!rootElement) {
 }
 
 createRoot(rootElement).render(
-  React.createElement(React.StrictMode, null, React.createElement(App))
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
 );
