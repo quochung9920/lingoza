@@ -16,6 +16,7 @@
 export * from "./common.js";
 export * from "./taxonomy.js";
 export * from "./lexicon.js";
+export * from "./program.js";
 export * from "./curriculum.js";
 export * from "./dialogue.js";
 export * from "./assessment.js";
