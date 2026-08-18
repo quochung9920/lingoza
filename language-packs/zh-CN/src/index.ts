@@ -23,7 +23,7 @@ import {
   expansionLexicalItems,
   expansionSentences,
   expansionUnits
-} from "./expansion.js";
+} from "./expansion-bundle.js";
 import { lexicalItems as coreLexicalItems, sentences as coreSentences } from "./lexicon.js";
 import { patterns } from "./patterns.js";
 import { topics } from "./topics.js";
