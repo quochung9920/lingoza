@@ -45,8 +45,9 @@ const GOAL_LABEL = {
 
 export function SettingsScreen() {
   const content = useContent();
-  const { snapshot, updatePreferences, restartOnboarding } = useLearner();
+  const { snapshot, updatePreferences, updatePrivacy, restartOnboarding } = useLearner();
   const preferences = snapshot.profile.preferences;
+  const privacy = snapshot.profile.privacy;
 
   const setSupportLayer = (key: string, enabled: boolean) => {
     const next = new Set(preferences.visibleSupportLayers);
@@ -146,11 +147,19 @@ export function SettingsScreen() {
 
       <Card>
         <SectionHeading title="Quyền riêng tư khi luyện nói" />
-        <div className="lz-setting-note">
-          <span aria-hidden="true">🔒</span>
-          <p>
-            Bản ghi luyện nói mặc định không được lưu lâu dài. Hiện tại Lingoza xử lý trên thiết bị và loại bỏ bản ghi sau lượt luyện. Analytics mạng cũng chưa được bật trong bản hiện tại.
-          </p>
+        <div className="lz-settings-group">
+          <ToggleRow
+            title="Kiểm tra tôi có nói đúng câu"
+            body="Khi bật, Lingoza có thể dùng dịch vụ nhận dạng giọng nói do trình duyệt hoặc WebView cung cấp để đối chiếu câu bạn nói với câu mục tiêu. Tùy nền tảng, phần nhận dạng này có thể được xử lý ngoài thiết bị."
+            checked={privacy.speechRecognitionOptIn}
+            onChange={(speechRecognitionOptIn) => updatePrivacy({ speechRecognitionOptIn })}
+          />
+          <div className="lz-setting-note">
+            <span aria-hidden="true">🔒</span>
+            <p>
+              Phân tích thanh điệu, nhịp, tốc độ và khoảng nghỉ vẫn được xử lý cục bộ từ bản ghi. Bản ghi mặc định bị loại bỏ sau lượt luyện. Nhận dạng câu chỉ chạy khi bạn chủ động bật công tắc phía trên; nếu thiết bị không hỗ trợ, Lingoza tự quay về chế độ chấm prosody.
+            </p>
+          </div>
         </div>
       </Card>
     </div>
