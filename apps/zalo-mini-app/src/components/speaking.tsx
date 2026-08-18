@@ -5,7 +5,7 @@ import type {
   SpeechEvaluation,
   SpeechMetricId
 } from "../../../../packages/pronunciation-engine/src/index";
-import { modelFreeSpeechEvaluator } from "../../../../packages/pronunciation-engine/src/index";
+import { hybridSpeechEvaluator } from "../../../../packages/pronunciation-engine/src/index";
 import { useAudio } from "../app/audio-provider";
 import { useLearner } from "../app/learner-provider";
 import {
@@ -15,18 +15,23 @@ import {
   referenceFeaturesFromMetadata,
   type Recording
 } from "../audio/recorder";
+import {
+  createBrowserSpeechVerifier,
+  isBrowserSpeechRecognitionSupported
+} from "../audio/speech-recognition";
 import { ct } from "../lib/i18n";
 import { AudioButton } from "./audio";
 import { FeedbackPanel, PrimaryButton, SecondaryButton } from "./primitives";
 
 /**
- * The speaking surface: microphone, waveforms, prosody feedback.
+ * The speaking surface: microphone, waveforms, sentence verification and
+ * evidence-aware pronunciation feedback.
  *
- * Everything technical is hidden. The learner sees a microphone, two
- * waveforms, and four plain-language readings. They never see "uploading",
- * "encoding" or a codec name, because none of those are decisions they can act
- * on. Errors are the exception -- a denied permission is something only they
- * can fix, so that one is stated plainly.
+ * Prosody is always evaluated locally when recording is supported. Transcript
+ * verification is optional and consent-gated because a browser/WebView speech
+ * recognizer may process audio outside the device. Phoneme accuracy is never
+ * invented: until a specialised provider supplies phoneme evidence, the UI
+ * explicitly says the result is prosody-only.
  */
 
 export type RecorderPhase = "idle" | "recording" | "processing" | "reviewed" | "denied" | "unsupported";
@@ -35,13 +40,6 @@ export type RecorderPhase = "idle" | "recording" | "processing" | "reviewed" | "
 /* Waveform                                                            */
 /* ------------------------------------------------------------------ */
 
-/**
- * Amplitude bars.
- *
- * Purely decorative in the accessibility tree: the information a learner acts
- * on is in the metrics below, and a screen reader announcing 48 bar heights
- * would be noise, not access.
- */
 export function Waveform({ envelope, variant }: { envelope: number[]; variant?: "learner" }) {
   const bars = envelope.length > 0 ? envelope : new Array<number>(24).fill(0.12);
   return (
@@ -102,21 +100,14 @@ export function MicrophoneButton({
 /* ------------------------------------------------------------------ */
 
 const METRIC_LABEL: Record<SpeechMetricId, Parameters<typeof ct>[0]> = {
+  contentMatch: "metric.contentMatch",
+  phonemeAccuracy: "metric.phonemeAccuracy",
   toneContour: "metric.toneContour",
   rhythm: "metric.rhythm",
   pace: "metric.pace",
   pausing: "metric.pausing"
 };
 
-/**
- * Prosody readings.
- *
- * A metric only shows a percentage when the underlying measurement justifies
- * one (`precise`). Pace and pausing are derived from coarse duration and
- * silence comparisons, so they show a qualitative band instead -- printing
- * "pace: 87%" would imply a precision the measurement does not have, and the
- * product would be making the exact claim it set out not to make.
- */
 export function SpeechMetrics({ evaluation }: { evaluation: SpeechEvaluation }) {
   if (evaluation.metrics.length === 0) {
     return <p className="lz-muted">{ct("metric.unavailable")}</p>;
@@ -144,7 +135,7 @@ export function SpeechMetrics({ evaluation }: { evaluation: SpeechEvaluation }) 
         </div>
       ))}
       {evaluation.unavailable
-        .filter((entry) => entry.reason !== "not-applicable")
+        .filter((entry) => entry.reason !== "not-applicable" && entry.reason !== "provider-unavailable")
         .map((entry) => (
           <p className="lz-muted" key={entry.id}>
             {ct(METRIC_LABEL[entry.id])}: {ct("metric.unavailable")}
@@ -154,30 +145,72 @@ export function SpeechMetrics({ evaluation }: { evaluation: SpeechEvaluation }) 
   );
 }
 
+function VerificationFeedback({
+  evaluation,
+  recognitionRequested,
+  recognitionSupported
+}: {
+  evaluation: SpeechEvaluation;
+  recognitionRequested: boolean;
+  recognitionSupported: boolean;
+}) {
+  const verification = evaluation.verification;
+
+  if (verification.content === "matched") {
+    return (
+      <FeedbackPanel tone="success" title={ct("speak.contentMatched")}>
+        {verification.recognizedText ? (
+          <p className="lz-muted">
+            {ct("speak.recognizedAs")}: <strong lang="zh-CN">{verification.recognizedText}</strong>
+          </p>
+        ) : null}
+        <p className="lz-muted">
+          {verification.pronunciation === "phoneme-verified"
+            ? ct("speak.phonemeVerified")
+            : ct("speak.prosodyOnly")}
+        </p>
+      </FeedbackPanel>
+    );
+  }
+
+  if (verification.content === "mismatch") {
+    return (
+      <FeedbackPanel tone="attention" title={ct("speak.contentMismatch")}>
+        {verification.recognizedText ? (
+          <p className="lz-muted">
+            {ct("speak.recognizedAs")}: <strong lang="zh-CN">{verification.recognizedText}</strong>
+          </p>
+        ) : null}
+        <p className="lz-muted">{ct("speak.prosodyOnly")}</p>
+      </FeedbackPanel>
+    );
+  }
+
+  return (
+    <FeedbackPanel tone="neutral" title={ct("speak.contentUnverified")}>
+      <p className="lz-muted">
+        {recognitionRequested && !recognitionSupported
+          ? ct("speak.recognitionUnavailable")
+          : ct("speak.prosodyOnly")}
+      </p>
+    </FeedbackPanel>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* Recorder panel                                                      */
 /* ------------------------------------------------------------------ */
 
 export interface RecorderPanelProps {
-  /** Reference clip the learner is imitating. */
   targetId: ContentId;
   targetText: string;
   targetAsset: AudioAsset | undefined;
-  /** Whether the target language is tonal; gates tone reporting. */
   tonal?: boolean;
-  /** Called once the learner accepts the attempt and moves on. */
   onComplete: (score: number) => void;
   continueLabel?: string;
 }
 
-/**
- * Record → compare → continue.
- *
- * Microphone permission is requested on the first tap of the button, never
- * before. The attempt's audio is held only as an object URL for playback and
- * is revoked the moment the learner records again or moves on, unless they
- * have explicitly opted into keeping recordings locally.
- */
+/** Record → optionally verify text → compare prosody → continue. */
 export function RecorderPanel({
   targetId,
   targetText,
@@ -190,6 +223,10 @@ export function RecorderPanel({
   const { manager } = useAudio();
 
   const recorder = useMemo(() => createSpeechRecorder(), []);
+  const verifier = useMemo(
+    () => createBrowserSpeechVerifier(snapshot.profile.activeLanguage),
+    [snapshot.profile.activeLanguage]
+  );
   const [phase, setPhase] = useState<RecorderPhase>(() =>
     isRecordingSupported() ? "idle" : "unsupported"
   );
@@ -198,6 +235,8 @@ export function RecorderPanel({
   const playbackRef = useRef<HTMLAudioElement | null>(null);
 
   const keepRecordings = snapshot.profile.privacy.keepRecordingsLocally;
+  const recognitionRequested = snapshot.profile.privacy.speechRecognitionOptIn;
+  const recognitionSupported = isBrowserSpeechRecognitionSupported();
 
   const discard = useCallback(
     (current: Recording | null) => {
@@ -209,15 +248,14 @@ export function RecorderPanel({
   useEffect(
     () => () => {
       recorder.cancel();
+      verifier.cancel();
       playbackRef.current?.pause();
       discard(recording);
     },
-    [recorder, recording, discard]
+    [recorder, verifier, recording, discard]
   );
 
   const referenceEnvelope = useMemo(() => {
-    // Until real recordings exist, the reference waveform is drawn from the
-    // authored segment structure rather than invented amplitudes.
     const segments = targetAsset?.normal.segments;
     if (!segments || segments.length === 0) return new Array<number>(24).fill(0.55);
     const total = targetAsset?.normal.durationMs ?? 1600;
@@ -235,40 +273,60 @@ export function RecorderPanel({
     discard(recording);
     setRecording(null);
     setEvaluation(null);
+    verifier.cancel();
 
     try {
       await recorder.start();
+      if (recognitionRequested && verifier.supported) verifier.start();
       if (!snapshot.profile.privacy.microphoneConsentGrantedAt) grantMicrophoneConsent();
       setPhase("recording");
     } catch {
+      verifier.cancel();
       setPhase(isRecordingSupported() ? "denied" : "unsupported");
     }
-  }, [manager, recorder, recording, discard, snapshot.profile.privacy.microphoneConsentGrantedAt, grantMicrophoneConsent]);
+  }, [
+    manager,
+    recorder,
+    verifier,
+    recording,
+    discard,
+    recognitionRequested,
+    snapshot.profile.privacy.microphoneConsentGrantedAt,
+    grantMicrophoneConsent
+  ]);
 
   const handleStop = useCallback(async () => {
     setPhase("processing");
     try {
-      const result = await recorder.stop();
+      const [result, recognition] = await Promise.all([
+        recorder.stop(),
+        recognitionRequested && verifier.supported
+          ? verifier.stop(targetText)
+          : Promise.resolve(null)
+      ]);
       if (!result) {
+        verifier.cancel();
         setPhase("idle");
         return;
       }
       setRecording(result);
       setEvaluation(
-        modelFreeSpeechEvaluator.evaluate({
+        hybridSpeechEvaluator.evaluate({
           reference: referenceFeaturesFromMetadata(
             targetAsset?.normal.durationMs ?? result.durationMs,
             targetAsset?.normal.segments
           ),
           learner: result.features,
-          tonal
+          tonal,
+          recognition: recognition ?? undefined
         })
       );
       setPhase("reviewed");
     } catch {
+      verifier.cancel();
       setPhase("idle");
     }
-  }, [recorder, targetAsset, tonal]);
+  }, [recorder, verifier, recognitionRequested, targetText, targetAsset, tonal]);
 
   const playBack = useCallback(() => {
     if (!recording) return;
@@ -306,6 +364,11 @@ export function RecorderPanel({
               {ct("speak.permissionBody")}
             </p>
           ) : null}
+          {phase === "idle" && recognitionRequested && !recognitionSupported ? (
+            <p className="lz-muted" style={{ textAlign: "center", maxWidth: 320 }}>
+              {ct("speak.recognitionUnavailable")}
+            </p>
+          ) : null}
         </div>
       ) : null}
 
@@ -332,6 +395,11 @@ export function RecorderPanel({
             <Waveform envelope={recording.envelope} variant="learner" />
           </div>
 
+          <VerificationFeedback
+            evaluation={evaluation}
+            recognitionRequested={recognitionRequested}
+            recognitionSupported={recognitionSupported}
+          />
           <SpeechMetrics evaluation={evaluation} />
 
           <div className="lz-stack lz-stack--tight">
