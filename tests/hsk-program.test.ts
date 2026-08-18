@@ -7,6 +7,7 @@ import {
   productionPlanForBand,
   validateHskProductionPlan
 } from "../language-packs/zh-CN/src/hsk-production-plan.js";
+import { hasVietnameseHskThemeLabel } from "../language-packs/zh-CN/src/hsk-theme-labels.js";
 
 describe("HSK 1-9 program roadmap", () => {
   it("contains exactly nine ordered bands", () => {
@@ -47,6 +48,12 @@ describe("HSK 1-9 program roadmap", () => {
     expect(HSK_PRODUCTION_PLAN).toHaveLength(9);
     expect(HSK_PRODUCTION_PLAN.map((band) => band.band)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
     expect(validateHskProductionPlan()).toEqual([]);
+  });
+
+  it("provides a learner-facing Vietnamese label for every curriculum category", () => {
+    const themes = HSK_PRODUCTION_PLAN.flatMap((band) => [...band.themes]);
+    expect(themes).toHaveLength(180);
+    expect(themes.every(hasVietnameseHskThemeLabel)).toBe(true);
   });
 
   it("keeps production-plan stage and release status aligned with the learner roadmap", () => {
