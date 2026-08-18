@@ -10,15 +10,28 @@ const defaultNormalizer: Normalizer = {
   }
 };
 
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function compilePattern(pattern: string, slots: Record<string, string[]>): RegExp {
-  let source = pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  for (const [slot, values] of Object.entries(slots)) {
-    const token = `\\{${slot}\\}`;
-    const alternatives = values
-      .map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-      .join("|");
-    source = source.replace(new RegExp(token, "g"), `(?:${alternatives})`);
+  const placeholder = /\{([a-zA-Z0-9_-]+)\}/g;
+  let source = "";
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = placeholder.exec(pattern)) !== null) {
+    source += escapeRegex(pattern.slice(cursor, match.index));
+    const slotName = match[1];
+    const values = slots[slotName];
+    if (!values || values.length === 0) {
+      throw new Error(`Grammar pattern references undefined slot: ${slotName}`);
+    }
+    source += `(?:${values.map(escapeRegex).join("|")})`;
+    cursor = match.index + match[0].length;
   }
+
+  source += escapeRegex(pattern.slice(cursor));
   return new RegExp(`^${source}$`, "u");
 }
 
