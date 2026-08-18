@@ -6,7 +6,7 @@ import type { LocalizedText, UiLocale } from "../../../../packages/content-schem
  * Content ships `LocalizedText` maps rather than strings so that a pack can
  * serve a Vietnamese and an English learner from the same data. Resolution
  * falls back rather than throwing: a missing translation should degrade to
- * *some* readable text, never to a blank card in the middle of a lesson.
+ * some readable text, never to a blank card in the middle of a lesson.
  */
 
 export const DEFAULT_LOCALE: UiLocale = "vi-VN";
@@ -17,7 +17,6 @@ export function t(text: LocalizedText | undefined, locale: UiLocale = DEFAULT_LO
   return text[locale] ?? text[FALLBACK_LOCALE] ?? Object.values(text)[0] ?? "";
 }
 
-/** UI chrome strings. Small enough to live inline; extract when a third locale lands. */
 const ui = {
   "vi-VN": {
     "nav.learn": "Học",
@@ -61,7 +60,7 @@ const ui = {
     "speak.you": "Bạn",
     "speak.permissionTitle": "Cần quyền micro",
     "speak.permissionBody":
-      "Lingoza cần micro để bạn luyện nói. Phân tích prosody cơ bản được xử lý cục bộ và bản ghi mặc định bị xoá sau lượt luyện. Nếu bạn bật kiểm tra đúng câu trong Cài đặt, trình duyệt/WebView có thể xử lý phần nhận dạng ngoài thiết bị.",
+      "Lingoza cần micro để bạn luyện nói. Phân tích prosody cơ bản được xử lý cục bộ và bản ghi mặc định bị xoá sau lượt luyện. Nếu bạn bật kiểm tra đúng câu hoặc chấm phát âm nâng cao trong Cài đặt, phần tương ứng có thể được xử lý ngoài thiết bị.",
     "speak.permissionDenied":
       "Chưa có quyền micro. Bạn có thể bật lại trong cài đặt trình duyệt rồi thử lại.",
     "speak.unsupported": "Thiết bị này chưa hỗ trợ ghi âm. Bạn vẫn có thể nghe và nhắc lại.",
@@ -71,7 +70,8 @@ const ui = {
     "speak.recognizedAs": "Hệ thống nghe được",
     "speak.prosodyOnly": "Hiện đang chấm thanh điệu, nhịp, tốc độ và khoảng nghỉ. Chưa có bằng chứng phoneme nên không gọi đây là độ chính xác phát âm.",
     "speak.phonemeVerified": "Đã có bằng chứng phoneme/syllable từ bộ chấm phát âm chuyên dụng.",
-    "speak.recognitionUnavailable": "Nhận dạng câu không khả dụng trên thiết bị này; Lingoza vẫn chấm prosody cục bộ.",
+    "speak.recognitionUnavailable": "Nhận dạng câu không khả dụng; Lingoza vẫn chấm prosody cục bộ.",
+    "speak.advancedUnavailable": "Chấm phát âm nâng cao đang bật nhưng Speech Gateway chưa được cấu hình cho bản build này. Lingoza sẽ không gửi audio và vẫn chấm prosody cục bộ.",
     "metric.contentMatch": "Đúng nội dung câu",
     "metric.phonemeAccuracy": "Âm tiết / âm vị",
     "metric.toneContour": "Thanh điệu",
